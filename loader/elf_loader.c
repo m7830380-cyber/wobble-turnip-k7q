@@ -18,8 +18,9 @@
 #define PUP(x) PDOWN((x) + PG - 1)
 
 static so_module *g_mods;
-static so_resolver g_resolver;
+static so_resolver g_resolver, g_late;
 void so_set_resolver(so_resolver r) { g_resolver = r; }
+void so_set_late_resolver(so_resolver r) { g_late = r; }
 
 static void *lookup_in(so_module *m, const char *name) {
   Elf64_Sym *syms = m->dynsym;
@@ -37,7 +38,7 @@ static void *resolve(const char *name) {
   if (p) return p;
   for (so_module *m = g_mods; m; m = m->next)
     if ((p = lookup_in(m, name))) return p;
-  return NULL;
+  return g_late ? g_late(name) : NULL;
 }
 
 static size_t count_syms(uint8_t *base, Elf64_Dyn *dyn) {
@@ -199,6 +200,11 @@ so_module *so_load(const char *path, int *unresolved) {
 }
 
 void so_init(so_module *m) {
+  if (m->inited) return;
+  m->inited = 1;
+  Elf64_Dyn *dyn = m->dyn;
+  for (Elf64_Dyn *d = dyn; d->d_tag; d++) if (d->d_tag == DT_NEEDED) { so_module *dm = so_find(m->dynstr + d->d_un.d_val); if (dm) so_init(dm); }
+  if (getenv("SO_VERBOSE")) fprintf(stderr, "init %s (%zu ctors)\n", m->name, m->init_count);
   for (size_t i = 0; i < m->init_count; i++)
     if (m->init_array[i] && (intptr_t)m->init_array[i] != -1) m->init_array[i]();
 }
@@ -208,4 +214,9 @@ void so_tls_init_block(uint8_t *tp) {
     memset(tp + m->tls_off, 0, m->tls_memsz);
     memcpy(tp + m->tls_off, m->tls_init, m->tls_filesz);
   }
+}
+void so_init_all(void) {
+  so_module *v[256]; int n = 0;
+  for (so_module *m = g_mods; m && n < 256; m = m->next) v[n++] = m;
+  while (n--) so_init(v[n]);  /* load order */
 }
