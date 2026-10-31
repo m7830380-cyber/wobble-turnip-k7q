@@ -20,7 +20,7 @@ jobs:
           mkdir -p out
           if GMKEY="${{ secrets.GMKEY }}" GH_TOKEN="${{ github.token }}" sh tools/getdata.sh; then echo REAL DATA; else
             rm -rf data; mkdir -p data/garrysmod && cp tools/fakegame/gameinfo.txt data/garrysmod/ && ln -s $PWD/apk/rt data/garrysmod/runtime && ln -s $PWD/apk/rt/platform data/platform; fi
-          export LIBDIR=$PWD/apk/lib/arm64-v8a APP_DATA_PATH=$PWD/data VALVE_GAME_PATH=$PWD/data SDL_VIDEODRIVER=x11 DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 SDL_VIDEO_X11_FORCE_EGL=1 SDL_OPENGL_ES_DRIVER=1 GL_VERBOSE=1 SDL_AUDIODRIVER=dummy SO_MAP=1 JNI_VERBOSE=1
+          mkdir -p $PWD/wr; export SOURCEVR_WRITE_GAME_PATH=$PWD/wr SOURCEVR_SHARED_CONTENT_PATH=$PWD/data LIBDIR=$PWD/apk/lib/arm64-v8a APP_DATA_PATH=$PWD/data VALVE_GAME_PATH=$PWD/data SDL_VIDEODRIVER=x11 DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 SDL_VIDEO_X11_FORCE_EGL=1 SDL_OPENGL_ES_DRIVER=1 GL_VERBOSE=1 SDL_AUDIODRIVER=dummy SO_MAP=1 JNI_VERBOSE=1
           (Xvfb :99 -screen 0 1280x720x24 >/dev/null 2>&1 &); sleep 2
           timeout 600 gdb -q -batch -x tools/dbg.gdb --args ./m -game garrysmod > out/gdb.txt 2> out/stderr.txt || true
           tail -60 out/stderr.txt; cat out/gdb.txt | tail -150
