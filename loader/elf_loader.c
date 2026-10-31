@@ -56,6 +56,41 @@ static size_t count_syms(uint8_t *base, Elf64_Dyn *dyn) {
   return last + 1;
 }
 
+
+// Android packed relocations (APS2): SLEB128 stream, grouped
+static int64_t sleb(const uint8_t **pp) {
+  const uint8_t *p = *pp; int64_t r = 0; int sh = 0; uint8_t b;
+  do { b = *p++; r |= (int64_t)(b & 0x7f) << sh; sh += 7; } while (b & 0x80);
+  if (sh < 64 && (b & 0x40)) r |= -((int64_t)1 << sh);
+  *pp = p; return r;
+}
+static Elf64_Rela *aps2_decode(const uint8_t *p, size_t sz, size_t *out_n) {
+  if (sz < 4 || memcmp(p, "APS2", 4)) { *out_n = 0; return NULL; }
+  p += 4;
+  size_t n = (size_t)sleb(&p); uint64_t off = (uint64_t)sleb(&p);
+  Elf64_Rela *v = malloc(n * sizeof *v), r = {0};
+  size_t k = 0;
+  while (k < n) {
+    size_t gs = (size_t)sleb(&p); int64_t fl = sleb(&p), gdelta = 0;
+    if (fl & 2) gdelta = sleb(&p);
+    if (fl & 1) r.r_info = (uint64_t)sleb(&p);
+    if ((fl & 8) && (fl & 4)) r.r_addend += sleb(&p);
+    else if (!(fl & 8)) r.r_addend = 0;
+    for (size_t i = 0; i < gs && k < n; i++) {
+      off += (fl & 2) ? gdelta : sleb(&p);
+      r.r_offset = off;
+      if (!(fl & 1)) r.r_info = (uint64_t)sleb(&p);
+      if ((fl & 8) && !(fl & 4)) r.r_addend += sleb(&p);
+      v[k++] = r;
+    }
+  }
+  *out_n = n; return v;
+}
+// TLSDESC: all module TLS lives at a fixed offset from the thread pointer (inside our fake bionic TCB)
+size_t so_tls_static_off = 0x200;   // where the first module's TLS begins, relative to tp
+size_t so_tls_static_used = 0;      // bytes allocated so far
+__asm__(".text\n.globl so_tlsdesc_static\nso_tlsdesc_static:\n ldr x0, [x0, #8]\n ret\n");
+extern char so_tlsdesc_static[];
 static char g_libdir[512];
 void so_set_libdir(const char *d) { snprintf(g_libdir, sizeof g_libdir, "%s", d); }
 so_module *so_find(const char *name) {
@@ -89,18 +124,21 @@ so_module *so_load(const char *path, int *unresolved) {
     if (ph[i].p_type == PT_TLS) { m->tls_init = base + ph[i].p_vaddr; m->tls_filesz = ph[i].p_filesz; m->tls_memsz = ph[i].p_memsz; }
   }
   m->dyn = dyn;
-  Elf64_Rela *rela = NULL, *jmp = NULL; size_t relasz = 0, jmpsz = 0;
+  Elf64_Rela *rela = NULL, *jmp = NULL; size_t relasz = 0, jmpsz = 0; const uint8_t *aps = NULL; size_t apssz = 0;
   for (Elf64_Dyn *d = dyn; d->d_tag; d++) switch (d->d_tag) {
     case DT_SYMTAB: m->dynsym = base + d->d_un.d_ptr; break;
     case DT_STRTAB: m->dynstr = (char *)base + d->d_un.d_ptr; break;
     case DT_RELA: rela = (Elf64_Rela *)(base + d->d_un.d_ptr); break;
     case DT_RELASZ: relasz = d->d_un.d_val; break;
     case DT_JMPREL: jmp = (Elf64_Rela *)(base + d->d_un.d_ptr); break;
+    case 0x60000011: aps = base + d->d_un.d_ptr; break;
+    case 0x60000012: apssz = d->d_un.d_val; break;
     case DT_PLTRELSZ: jmpsz = d->d_un.d_val; break;
     case DT_INIT_ARRAY: m->init_array = (void (**)(void))(base + d->d_un.d_ptr); break;
     case DT_INIT_ARRAYSZ: m->init_count = d->d_un.d_val / 8; break;
   }
   m->nsyms = count_syms(base, dyn);
+  if (m->tls_memsz) { so_tls_static_used = (so_tls_static_used + 15) & ~(size_t)15; m->tls_off = so_tls_static_off + so_tls_static_used; so_tls_static_used += m->tls_memsz; }
   for (Elf64_Dyn *d = dyn; d->d_tag; d++) if (d->d_tag == DT_NEEDED && g_libdir[0]) {
     char dp[700]; snprintf(dp, sizeof dp, "%s/%s", g_libdir, m->dynstr + d->d_un.d_val);
     if (!so_find(m->dynstr + d->d_un.d_val) && access(dp, R_OK) == 0) {
@@ -110,10 +148,20 @@ so_module *so_load(const char *path, int *unresolved) {
   }
   m->next = g_mods; g_mods = m;
   int bad = 0;
-  Elf64_Rela *tabs[2] = {rela, jmp};
-  size_t cnt[2] = {relasz / sizeof(Elf64_Rela), jmpsz / sizeof(Elf64_Rela)};
+  size_t apsn = 0; Elf64_Rela *apsr = aps ? aps2_decode(aps, apssz, &apsn) : NULL;
+  if (aps && !apsr) fprintf(stderr, "[%s] bad APS2 table\n", m->name);
+  if (getenv("SO_VERBOSE")) fprintf(stderr, "[%s] rela %zu aps2 %zu jmp %zu\n", m->name, relasz / 24, apsn, jmpsz / 24);
+  { const char *dm = getenv("DUMP_RELOCS");
+    if (dm && !strcmp(dm, m->name) && apsr) {
+      FILE *o = fopen(getenv("DUMP_OUT") ? getenv("DUMP_OUT") : "/dev/stdout", "w");
+      for (size_t i = 0; i < apsn; i++) fprintf(o, "%llx %u %u %llx\n", (unsigned long long)apsr[i].r_offset,
+        (unsigned)ELF64_R_TYPE(apsr[i].r_info), (unsigned)ELF64_R_SYM(apsr[i].r_info), (unsigned long long)apsr[i].r_addend);
+      fclose(o);
+    } }
+  Elf64_Rela *tabs[3] = {rela, apsr, jmp};
+  size_t cnt[3] = {relasz / sizeof(Elf64_Rela), apsn, jmpsz / sizeof(Elf64_Rela)};
   Elf64_Sym *syms = m->dynsym;
-  for (int t = 0; t < 2; t++) for (size_t i = 0; tabs[t] && i < cnt[t]; i++) {
+  for (int t = 0; t < 3; t++) for (size_t i = 0; tabs[t] && i < cnt[t]; i++) {
     Elf64_Rela *r = &tabs[t][i];
     uint64_t *where = (uint64_t *)(base + r->r_offset);
     uint32_t type = ELF64_R_TYPE(r->r_info), si = ELF64_R_SYM(r->r_info);
@@ -131,6 +179,10 @@ so_module *so_load(const char *path, int *unresolved) {
     switch (type) {
       case RA_RELATIVE: *where = (uint64_t)base + r->r_addend; break;
       case RA_ABS64: case RA_GLOB_DAT: case RA_JUMP_SLOT: *where = (uint64_t)val + r->r_addend; break;
+      case 1031: { /* TLSDESC */
+        uint64_t symoff = si ? syms[si].st_value : 0;
+        where[0] = (uint64_t)so_tlsdesc_static; where[1] = m->tls_off + symoff + r->r_addend; break; }
+      case 1030: /* TPREL64 */ *where = m->tls_off + (si ? syms[si].st_value : 0) + r->r_addend; break;
       default: fprintf(stderr, "[%s] reloc type %u unsupported\n", m->name, type); bad++;
     }
   }
@@ -149,4 +201,11 @@ so_module *so_load(const char *path, int *unresolved) {
 void so_init(so_module *m) {
   for (size_t i = 0; i < m->init_count; i++)
     if (m->init_array[i] && (intptr_t)m->init_array[i] != -1) m->init_array[i]();
+}
+
+void so_tls_init_block(uint8_t *tp) {
+  for (so_module *m = g_mods; m; m = m->next) if (m->tls_memsz) {
+    memset(tp + m->tls_off, 0, m->tls_memsz);
+    memcpy(tp + m->tls_off, m->tls_init, m->tls_filesz);
+  }
 }

@@ -1,0 +1,37 @@
+name: loader-test
+on:
+  push:
+    paths: ['loader/**', 'shim/**', '.github/workflows/loader-test.yml']
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch APK
+        run: |
+          sudo apt-get install -y llvm >/dev/null
+          curl -sL -o g.apk https://github.com/tinsarfal/GDroid/releases/download/0.1.30/GDroid-0.1.30.apk
+          mkdir apk && cd apk && unzip -q ../g.apk 'lib/arm64-v8a/*'
+      - name: Build loader
+        run: gcc -O1 -Wall -o t loader/elf_loader.c loader/test_load.c -ldl
+      - name: Validate APS2 decoder vs llvm-readelf
+        run: |
+          L=$PWD/apk/lib/arm64-v8a; mkdir -p out; fail=0
+          for f in $L/*.so; do
+            n=$(basename $f)
+            llvm-readelf -r --raw-relr $f 2>/dev/null | awk '/^Relocation section .\.rela\.dyn/{on=1;next} /^Relocation section/{on=0} on && /^[0-9a-f]{16}/{print}' > out/ref_$n.txt
+            [ -s out/ref_$n.txt ] || continue
+            # ref columns: offset info type symval symname+addend  -> normalize to "offset type addendOrSym"
+            awk '{o=$1; sub(/^0+/,"",o); a=$NF; if($3=="R_AARCH64_RELATIVE"){sub(/^0+/,"",a); if(a=="")a="0"; print o" R "a} else print o" S"}' out/ref_$n.txt | sort > out/r.txt
+            LIBDIR=$L DUMP_RELOCS=$n DUMP_OUT=out/mine_$n.txt ./t $f >/dev/null 2>&1 || true
+            awk '{if($2==1027) print $1" R "$4; else print $1" S"}' out/mine_$n.txt | sort > out/m.txt
+            if cmp -s out/r.txt out/m.txt; then echo "OK   $n $(wc -l < out/m.txt)"; else echo "DIFF $n ref=$(wc -l < out/r.txt) mine=$(wc -l < out/m.txt)"; diff out/r.txt out/m.txt | head -5; fail=1; fi
+          done | tee out/aps2.txt
+      - name: Load all
+        run: |
+          L=$PWD/apk/lib/arm64-v8a
+          SO_VERBOSE=1 LIBDIR=$L ./t $L/liblauncher.so $(ls $L/*.so | grep -v zstd) 2> out/load_err.txt | tee out/load.txt
+          grep unresolved out/load_err.txt | sed 's/.*unresolved //' | sort -u > out/unresolved.txt; wc -l out/unresolved.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: loader-test, path: out }
