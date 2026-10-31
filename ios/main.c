@@ -29,7 +29,15 @@ static void *gl_proc(const char *n) {
 }
 void *ios_gl_proc(const char *n) { return gl_proc(n); }
 void *glctx_resolve(const char *n);
+static int lib_private(const char *n) {
+  // libraries statically linked into the .so files (FreeType etc.). Must bind to the module's own copy,
+  // never to a same-named symbol that happens to exist in an iOS framework (different version/ABI -> hangs)
+  static const char *pre[] = {"FT_", "FTC_", "TT_", "T1_", "ft_", "tt_", "af_", "ps_", "cff_", "hb_", "png_", "jpeg_", "ogg_", "vorbis_", "opus_", "speex_", "mpg123_", "lua_", "luaL_", "luaJIT_", "ZSTD_", "LZ4_", "XXH", 0};
+  for (int i = 0; pre[i]; i++) if (!strncmp(n, pre[i], strlen(pre[i]))) return 1;
+  return 0;
+}
 static void *host(const char *n) {
+  if (lib_private(n)) return NULL;
   { void *g = glctx_resolve(n); if (g) return g; }
   void *p = platform_resolve(n);
   if (!p && !strncmp(n, "SDL_", 4)) p = dlsym(RTLD_DEFAULT, n);
