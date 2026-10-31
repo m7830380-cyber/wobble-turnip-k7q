@@ -304,7 +304,7 @@ extern char bs_sigaddset[];
 extern char bs_sigdelset[];
 extern char bs_sigismember[];
 extern char bs_sigaction[];
-extern char bs_sigprocmask[];
+extern char bs_sigprocmask[] __asm__("bs_sigprocmask");
 extern char bs_pthread_sigmask[];
 extern char bs_sigsuspend[];
 extern char bs_sigpending[];
