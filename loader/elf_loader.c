@@ -153,6 +153,7 @@ so_module *so_load(const char *path, int *unresolved) {
   m->next = g_mods; g_mods = m;
   int bad = 0;
   size_t apsn = 0; Elf64_Rela *apsr = aps ? aps2_decode(aps, apssz, &apsn) : NULL;
+  if (getenv("SO_MAP")) fprintf(stderr, "MAP %s %p %zx\n", m->name, m->base, m->size);
   if (aps && !apsr) fprintf(stderr, "[%s] bad APS2 table\n", m->name);
   if (getenv("SO_VERBOSE")) fprintf(stderr, "[%s] rela %zu aps2 %zu jmp %zu\n", m->name, relasz / 24, apsn, jmpsz / 24);
   { const char *dm = getenv("DUMP_RELOCS");

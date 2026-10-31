@@ -1,0 +1,28 @@
+name: run-debug
+on:
+  push:
+    paths: ['loader/**', 'shim/**', '.github/workflows/run-debug.yml']
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deps + APK
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gdb libsdl2-dev llvm >/dev/null
+          curl -sL -o g.apk https://github.com/tinsarfal/GDroid/releases/download/0.1.30/GDroid-0.1.30.apk
+          mkdir apk && cd apk && unzip -q ../g.apk 'lib/arm64-v8a/*'
+      - name: Build
+        run: gcc -O1 -g -Wno-unused-function -o m loader/elf_loader.c shim/bionic.c shim/jni.c shim/platform.c shim/run_main.c -ldl -lpthread
+      - name: Run under gdb
+        run: |
+          mkdir -p out data/garrysmod
+          export LIBDIR=$PWD/apk/lib/arm64-v8a APP_DATA_PATH=$PWD/data VALVE_GAME_PATH=$PWD/data SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy SO_MAP=1 JNI_VERBOSE=1
+          timeout 600 gdb -q -batch -ex 'set pagination off' -ex 'handle SIGSEGV stop nopass' -ex 'handle SIGBUS stop nopass' -ex 'handle SIGILL stop nopass' -ex 'handle SIGABRT stop nopass' -ex run -ex 'bt 30' -ex 'info registers' -ex 'x/12i $pc-24' -ex 'info threads' -ex 'thread apply all bt 8' --args ./m -game garrysmod > out/gdb.txt 2> out/stderr.txt || true
+          tail -60 out/stderr.txt; cat out/gdb.txt | tail -150
+          cp -r data/files/diagnostics out/ 2>/dev/null || true
+      - name: Symbolize
+        run: python3 tools/symbolize.py out/stderr.txt out/gdb.txt apk/lib/arm64-v8a > out/sym.txt || true; cat out/sym.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: run-debug, path: out }
