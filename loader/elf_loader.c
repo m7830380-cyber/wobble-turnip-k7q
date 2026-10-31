@@ -90,6 +90,7 @@ static Elf64_Rela *aps2_decode(const uint8_t *p, size_t sz, size_t *out_n) {
   *out_n = n; return v;
 }
 // TLSDESC: all module TLS lives at a fixed offset from the thread pointer (inside our fake bionic TCB)
+int so_tp_slot = 0;
 size_t so_tls_static_off = 0x200;   // where the first module's TLS begins, relative to tp
 size_t so_tls_static_used = 0;      // bytes allocated so far
 __asm__(".text\n.globl so_tlsdesc_static\nso_tlsdesc_static:\n ldr x0, [x0, #8]\n ret\n");
@@ -116,8 +117,17 @@ so_module *so_load(const char *path, int *unresolved) {
   uint64_t hi = 0;
   for (int i = 0; i < eh->e_phnum; i++)
     if (ph[i].p_type == PT_LOAD && ph[i].p_vaddr + ph[i].p_memsz > hi) hi = ph[i].p_vaddr + ph[i].p_memsz;
-  size_t sz = PUP(hi);
-  uint8_t *base = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  size_t sz = PUP(hi), nsite = 0;
+#ifdef __APPLE__
+  /* XNU owns tpidr_el0 (cpu number), so rewrite every "mrs xN, tpidr_el0" into a branch to a
+     thunk that loads our per-thread TCB from Darwin TSD slot so_tp_slot (tpidrro_el0). */
+  for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) {
+    uint32_t *c = (uint32_t *)(f + ph[i].p_offset);
+    for (size_t k = 0; k < ph[i].p_filesz / 4; k++) if ((c[k] & 0xFFFFFFE0u) == 0xD53BD040u) nsite++;
+  }
+#endif
+  size_t tsz = PUP(nsite * 16);
+  uint8_t *base = mmap(NULL, sz + tsz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (base == MAP_FAILED) return NULL;
   so_module *m = calloc(1, sizeof *m);
   m->base = base; m->size = sz;
@@ -130,6 +140,23 @@ so_module *so_load(const char *path, int *unresolved) {
     if (ph[i].p_type == PT_TLS) { m->tls_init = base + ph[i].p_vaddr; m->tls_filesz = ph[i].p_filesz; m->tls_memsz = ph[i].p_memsz; }
   }
   m->dyn = dyn;
+#ifdef __APPLE__
+  if (nsite) {
+    uint32_t *t = (uint32_t *)(base + sz); size_t n = 0;
+    for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) {
+      uint32_t *c = (uint32_t *)(base + ph[i].p_vaddr);
+      for (size_t k = 0; k < ph[i].p_filesz / 4; k++) if ((c[k] & 0xFFFFFFE0u) == 0xD53BD040u) {
+        uint32_t r = c[k] & 31; uint32_t *th = t + n * 4; n++;
+        th[0] = 0xD53BD060u | r;                                         /* mrs  xr, tpidrro_el0 */
+        th[1] = 0x92400000u | (61u << 16) | (60u << 10) | (r << 5) | r;   /* and  xr, xr, #~7 */
+        th[2] = 0xF9400000u | ((uint32_t)so_tp_slot << 10) | (r << 5) | r; /* ldr  xr, [xr, #slot*8] */
+        th[3] = 0x14000000u | ((uint32_t)((c + k + 1) - (th + 3)) & 0x3FFFFFF); /* b back */
+        c[k] = 0x14000000u | ((uint32_t)(th - (c + k)) & 0x3FFFFFF);       /* b thunk */
+      }
+    }
+    fprintf(stderr, "[%s] patched %zu tpidr_el0 reads\n", m->name, n);
+  }
+#endif
   Elf64_Rela *rela = NULL, *jmp = NULL; size_t relasz = 0, jmpsz = 0; const uint8_t *aps = NULL; size_t apssz = 0;
   for (Elf64_Dyn *d = dyn; d->d_tag; d++) switch (d->d_tag) {
     case DT_SYMTAB: m->dynsym = base + d->d_un.d_ptr; break;
@@ -200,6 +227,7 @@ so_module *so_load(const char *path, int *unresolved) {
     if (pr & PROT_EXEC) pr &= ~PROT_WRITE;
     mprotect(base + a, e - a, pr);
   }
+  if (tsz) mprotect(base + sz, tsz, PROT_READ | PROT_EXEC);
   munmap(f, st.st_size);
   if (unresolved) *unresolved = bad;
   return m;

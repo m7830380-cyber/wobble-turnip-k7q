@@ -367,6 +367,8 @@ void *bionic_resolve(const char *n) {
   return p;
 }
 void bionic_init(so_resolver next) {
+  pthread_once(&g_once, once); so_tp_slot = (int)g_tcb_key;
+  fprintf(stderr, "tcb tsd slot %d\n", so_tp_slot);
   g_next = next;
   b_stdin_p = (FILE *)b_sF; b_stdout_p = (FILE *)(b_sF + BIONIC_FILE_SZ); b_stderr_p = (FILE *)(b_sF + 2 * BIONIC_FILE_SZ);
   bionic_thread_enter();

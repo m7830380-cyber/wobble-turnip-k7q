@@ -18,6 +18,7 @@ so_module *so_find(const char *name);
 void so_init(so_module *m);
 void so_init_all(void);
 void *so_sym(so_module *m, const char *name);
+extern int so_tp_slot;
 extern size_t so_tls_static_off, so_tls_static_used;
 // copy every module's TLS image into a new thread block (tp = block base)
 void so_tls_init_block(uint8_t *tp);
