@@ -17,6 +17,8 @@ jobs:
           unzip -q ref.ipa 'Payload/hl2.app/Frameworks/*' -d ref
           ls ref/Payload/hl2.app/Frameworks
           curl -sL https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz | tar xz
+          python3 -m pip install --break-system-packages -q pyelftools capstone || python3 -m pip install -q pyelftools capstone
+          python3 tools/fix_x18.py apk/lib/arm64-v8a/*.so
       - name: Build
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
