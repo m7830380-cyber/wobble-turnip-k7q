@@ -15,6 +15,11 @@
 #include <dispatch/dispatch.h>
 #endif
 
+#ifdef __APPLE__
+static int E(int r) { switch (r) { case ETIMEDOUT: return 110; case EAGAIN: return 11; case EDEADLK: return 35; case ENOTSUP: return 95; default: return r; } }
+#else
+#define E(r) (r)
+#endif
 #define L1 4096
 #define L2 4096
 static void **g_tab[L1];
@@ -77,17 +82,17 @@ int bp_mutex_destroy(void *b) {
   pthread_mutex_t *m = *slot(h); ((uint32_t *)b)[1] = 0; free_h(h);
   if (m) { pthread_mutex_destroy(m); free(m); } return 0;
 }
-int bp_mutex_lock(void *b) { return pthread_mutex_lock(MXH(b)); }
-int bp_mutex_trylock(void *b) { return pthread_mutex_trylock(MXH(b)); }
-int bp_mutex_unlock(void *b) { return pthread_mutex_unlock(MXH(b)); }
+int bp_mutex_lock(void *b) { return E(pthread_mutex_lock(MXH(b))); }
+int bp_mutex_trylock(void *b) { return E(pthread_mutex_trylock(MXH(b))); }
+int bp_mutex_unlock(void *b) { return E(pthread_mutex_unlock(MXH(b))); }
 int bp_mutex_timedlock(void *b, const struct timespec *t) {
 #ifdef __APPLE__
   for (;;) { int r = pthread_mutex_trylock(MXH(b)); if (r != EBUSY) return r;
     struct timespec n; clock_gettime(CLOCK_REALTIME, &n);
-    if (n.tv_sec > t->tv_sec || (n.tv_sec == t->tv_sec && n.tv_nsec >= t->tv_nsec)) return ETIMEDOUT;
+    if (n.tv_sec > t->tv_sec || (n.tv_sec == t->tv_sec && n.tv_nsec >= t->tv_nsec)) return E(ETIMEDOUT);
     struct timespec s = {0, 200000}; nanosleep(&s, NULL); }
 #else
-  return pthread_mutex_timedlock(MXH(b), t);
+  return E(pthread_mutex_timedlock(MXH(b), t));
 #endif
 }
 
@@ -120,9 +125,9 @@ int bp_cond_destroy(void *b) {
   hcond *c = *slot(h); ((uint32_t *)b)[1] = 0; free_h(h);
   if (c) { pthread_cond_destroy(&c->c); free(c); } return 0;
 }
-int bp_cond_signal(void *b) { return pthread_cond_signal(&CVH(b)->c); }
-int bp_cond_broadcast(void *b) { return pthread_cond_broadcast(&CVH(b)->c); }
-int bp_cond_wait(void *b, void *m) { return pthread_cond_wait(&CVH(b)->c, MXH(m)); }
+int bp_cond_signal(void *b) { return E(pthread_cond_signal(&CVH(b)->c)); }
+int bp_cond_broadcast(void *b) { return E(pthread_cond_broadcast(&CVH(b)->c)); }
+int bp_cond_wait(void *b, void *m) { return E(pthread_cond_wait(&CVH(b)->c, MXH(m))); }
 static int cond_timed(hcond *c, pthread_mutex_t *m, const struct timespec *t, int clk) {
 #if !defined(__GLIBC__)
   struct timespec abs = *t;
@@ -132,20 +137,20 @@ static int cond_timed(hcond *c, pthread_mutex_t *m, const struct timespec *t, in
     long long r = rt.tv_sec * 1000000000LL + rt.tv_nsec + (d > 0 ? d : 0);
     abs.tv_sec = r / 1000000000LL; abs.tv_nsec = r % 1000000000LL;
   }
-  return pthread_cond_timedwait(&c->c, m, &abs);
+  return E(pthread_cond_timedwait(&c->c, m, &abs));
 #else
-  if (clk == c->clock || (clk != 1 && c->clock != 1)) return pthread_cond_timedwait(&c->c, m, t);
-  return pthread_cond_clockwait(&c->c, m, clk == 1 ? CLOCK_MONOTONIC : CLOCK_REALTIME, t);
+  if (clk == c->clock || (clk != 1 && c->clock != 1)) return E(pthread_cond_timedwait(&c->c, m, t));
+  return E(pthread_cond_clockwait(&c->c, m, clk == 1 ? CLOCK_MONOTONIC : CLOCK_REALTIME, t));
 #endif
 }
-int bp_cond_timedwait(void *b, void *m, const struct timespec *t) { hcond *c = CVH(b); return cond_timed(c, MXH(m), t, c->clock); }
-int bp_cond_timedwait_monotonic_np(void *b, void *m, const struct timespec *t) { return cond_timed(CVH(b), MXH(m), t, 1); }
+int bp_cond_timedwait(void *b, void *m, const struct timespec *t) { hcond *c = CVH(b); return E(cond_timed(c, MXH(m), t, c->clock)); }
+int bp_cond_timedwait_monotonic_np(void *b, void *m, const struct timespec *t) { return E(cond_timed(CVH(b), MXH(m), t, 1)); }
 int bp_cond_timedwait_relative_np(void *b, void *m, const struct timespec *rel) {
   struct timespec n; clock_gettime(CLOCK_REALTIME, &n);
   n.tv_sec += rel->tv_sec; n.tv_nsec += rel->tv_nsec; if (n.tv_nsec >= 1000000000) { n.tv_sec++; n.tv_nsec -= 1000000000; }
-  return cond_timed(CVH(b), MXH(m), &n, 0);
+  return E(cond_timed(CVH(b), MXH(m), &n, 0));
 }
-int bp_cond_clockwait(void *b, void *m, int clk, const struct timespec *t) { return cond_timed(CVH(b), MXH(m), t, clk == 1 || clk == 4 ? 1 : 0); }
+int bp_cond_clockwait(void *b, void *m, int clk, const struct timespec *t) { return E(cond_timed(CVH(b), MXH(m), t, clk == 1 || clk == 4 ? 1 : 0)); }
 
 /* ---------- rwlock ---------- */
 static void *mk_rw(void *b) { (void)b; pthread_rwlock_t *r = malloc(sizeof *r); pthread_rwlock_init(r, NULL); return r; }
@@ -156,11 +161,11 @@ int bp_rwlock_destroy(void *b) {
   pthread_rwlock_t *r = *slot(h); ((uint32_t *)b)[1] = 0; free_h(h);
   if (r) { pthread_rwlock_destroy(r); free(r); } return 0;
 }
-int bp_rwlock_rdlock(void *b) { return pthread_rwlock_rdlock(RWH(b)); }
-int bp_rwlock_wrlock(void *b) { return pthread_rwlock_wrlock(RWH(b)); }
-int bp_rwlock_tryrdlock(void *b) { return pthread_rwlock_tryrdlock(RWH(b)); }
-int bp_rwlock_trywrlock(void *b) { return pthread_rwlock_trywrlock(RWH(b)); }
-int bp_rwlock_unlock(void *b) { return pthread_rwlock_unlock(RWH(b)); }
+int bp_rwlock_rdlock(void *b) { return E(pthread_rwlock_rdlock(RWH(b))); }
+int bp_rwlock_wrlock(void *b) { return E(pthread_rwlock_wrlock(RWH(b))); }
+int bp_rwlock_tryrdlock(void *b) { return E(pthread_rwlock_tryrdlock(RWH(b))); }
+int bp_rwlock_trywrlock(void *b) { return E(pthread_rwlock_trywrlock(RWH(b))); }
+int bp_rwlock_unlock(void *b) { return E(pthread_rwlock_unlock(RWH(b))); }
 
 /* ---------- semaphores (unnamed) ---------- */
 // implemented on host mutex+cond so it works on Darwin (no unnamed sem_init there)
@@ -180,12 +185,12 @@ int bp_sem_wait(void *b) { hsem *s = SEM(b); if (!s) { errno = EINVAL; return -1
   pthread_mutex_lock(&s->m); while (!s->v) pthread_cond_wait(&s->c, &s->m); s->v--; pthread_mutex_unlock(&s->m); return 0; }
 int bp_sem_trywait(void *b) { hsem *s = SEM(b); if (!s) { errno = EINVAL; return -1; }
   pthread_mutex_lock(&s->m); int ok = s->v > 0; if (ok) s->v--; pthread_mutex_unlock(&s->m);
-  if (!ok) { errno = EAGAIN; return -1; } return 0; }
+  if (!ok) { errno = E(EAGAIN); return -1; } return 0; }
 int bp_sem_timedwait(void *b, const struct timespec *t) { hsem *s = SEM(b); if (!s) { errno = EINVAL; return -1; }
   int r = 0; pthread_mutex_lock(&s->m);
   while (!s->v && r != ETIMEDOUT) r = pthread_cond_timedwait(&s->c, &s->m, t);
   int ok = s->v > 0; if (ok) s->v--; pthread_mutex_unlock(&s->m);
-  if (!ok) { errno = ETIMEDOUT; return -1; } return 0; }
+  if (!ok) { errno = E(ETIMEDOUT); return -1; } return 0; }
 int bp_sem_getvalue(void *b, int *v) { hsem *s = SEM(b); if (!s) { errno = EINVAL; return -1; } *v = (int)s->v; return 0; }
 
 /* ---------- pthread_attr (bionic 56 bytes, 8-aligned): {u32 flags; void *stack_base; size_t stack_size; size_t guard; i32 policy; i32 prio} ---------- */
