@@ -42,7 +42,18 @@ static int exists(const char *a, const char *b) {
   char p[1200]; struct stat st; snprintf(p, sizeof p, "%s/%s", a, b); return stat(p, &st) == 0;
 }
 
+extern int csops(int pid, unsigned int ops, void *useraddr, size_t usersize);
+static int jit_enabled(void) { unsigned int f = 0; csops(getpid(), 0, &f, sizeof f); return (f & 0x10000000) != 0; }
+static void wait_for_jit(void) {
+  while (!jit_enabled()) {
+    const SDL_MessageBoxButtonData btn[] = {{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Retry"}, {0, 0, "Quit"}};
+    SDL_MessageBoxData d = {SDL_MESSAGEBOX_WARNING, NULL, "GMod", "JIT is not enabled.\n\nLaunch with JIT: TrollStore -> long-press GMod -> Open with JIT, or use StikDebug.\nThen tap Retry.", 2, btn, NULL};
+    int b = 0; SDL_ShowMessageBox(&d, &b); if (b == 0) exit(0);
+  }
+}
+
 static void wait_for_content(void) {
+  wait_for_jit();
   while (!exists(g_docs, "garrysmod/garrysmod_dir.vpk") && !exists(g_docs, "garrysmod/gameinfo.txt")) {
     char msg[2048];
     snprintf(msg, sizeof msg,
