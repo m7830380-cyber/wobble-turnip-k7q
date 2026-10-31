@@ -68,6 +68,17 @@ static int b_pthread_create(pthread_t *th, const void *a, void *(*fn)(void *), v
   return r;
 }
 
+/* bionic timeval = {long sec; long usec}; Darwin usec is 32-bit + padding */
+#include <sys/time.h>
+#include <sys/select.h>
+struct btv { long s, us; };
+static int b_gettimeofday(struct btv *b, void *tz) { struct timeval t; int r = gettimeofday(&t, tz); if (b) { b->s = t.tv_sec; b->us = t.tv_usec; } return r; }
+static int b_settimeofday(const struct btv *b, const void *tz) { (void)b; (void)tz; return 0; }
+static int b_utimes(const char *p, const struct btv *b) { if (!b) return utimes(p, NULL); struct timeval t[2] = {{b[0].s, (int)b[0].us}, {b[1].s, (int)b[1].us}}; return utimes(p, t); }
+static int b_select(int n, fd_set *r, fd_set *w, fd_set *e, struct btv *b) {
+  if (!b) return select(n, r, w, e, NULL);
+  struct timeval t = {b->s, (int)b->us}; int x = select(n, r, w, e, &t); b->s = t.tv_sec; b->us = t.tv_usec; return x; }
+
 /* ---------------- errno / stdio ---------------- */
 static int *b_errno(void) { return &errno; }
 
@@ -338,7 +349,7 @@ static int b_madvise(void *a, size_t l, int adv) { (void)a; (void)l; (void)adv; 
 static sym g_syms[] = {
   S("pthread_mutexattr_init", bp_mutexattr_init), S("pthread_mutexattr_destroy", bp_mutexattr_destroy), S("pthread_mutexattr_settype", bp_mutexattr_settype), S("pthread_mutexattr_gettype", bp_mutexattr_gettype), S("pthread_mutexattr_setpshared", bp_mutexattr_setpshared), S("pthread_mutex_init", bp_mutex_init), S("pthread_mutex_destroy", bp_mutex_destroy), S("pthread_mutex_lock", bp_mutex_lock), S("pthread_mutex_trylock", bp_mutex_trylock), S("pthread_mutex_unlock", bp_mutex_unlock), S("pthread_mutex_timedlock", bp_mutex_timedlock), S("pthread_condattr_init", bp_condattr_init), S("pthread_condattr_destroy", bp_condattr_destroy), S("pthread_condattr_setclock", bp_condattr_setclock), S("pthread_condattr_getclock", bp_condattr_getclock), S("pthread_condattr_setpshared", bp_condattr_setpshared), S("pthread_cond_init", bp_cond_init), S("pthread_cond_destroy", bp_cond_destroy), S("pthread_cond_signal", bp_cond_signal), S("pthread_cond_broadcast", bp_cond_broadcast), S("pthread_cond_wait", bp_cond_wait), S("pthread_cond_timedwait", bp_cond_timedwait), S("pthread_cond_timedwait_monotonic_np", bp_cond_timedwait_monotonic_np), S("pthread_cond_timedwait_relative_np", bp_cond_timedwait_relative_np), S("pthread_cond_clockwait", bp_cond_clockwait), S("pthread_rwlock_init", bp_rwlock_init), S("pthread_rwlock_destroy", bp_rwlock_destroy), S("pthread_rwlock_rdlock", bp_rwlock_rdlock), S("pthread_rwlock_wrlock", bp_rwlock_wrlock), S("pthread_rwlock_tryrdlock", bp_rwlock_tryrdlock), S("pthread_rwlock_trywrlock", bp_rwlock_trywrlock), S("pthread_rwlock_unlock", bp_rwlock_unlock), S("sem_init", bp_sem_init), S("sem_destroy", bp_sem_destroy), S("sem_post", bp_sem_post), S("sem_wait", bp_sem_wait), S("sem_trywait", bp_sem_trywait), S("sem_timedwait", bp_sem_timedwait), S("sem_getvalue", bp_sem_getvalue), S("pthread_attr_init", bp_attr_init), S("pthread_attr_destroy", bp_attr_destroy), S("pthread_attr_setdetachstate", bp_attr_setdetachstate), S("pthread_attr_getdetachstate", bp_attr_getdetachstate), S("pthread_attr_setstacksize", bp_attr_setstacksize), S("pthread_attr_getstacksize", bp_attr_getstacksize), S("pthread_attr_setguardsize", bp_attr_setguardsize), S("pthread_attr_setschedparam", bp_attr_setschedparam), S("pthread_attr_getschedparam", bp_attr_getschedparam), S("pthread_attr_setschedpolicy", bp_attr_setschedpolicy), S("pthread_attr_setscope", bp_attr_setscope), S("pthread_once", bp_once),
   S("sigemptyset", bs_sigemptyset), S("sigfillset", bs_sigfillset), S("sigaddset", bs_sigaddset), S("sigdelset", bs_sigdelset), S("sigismember", bs_sigismember), S("sigaction", bs_sigaction), S("sigprocmask", bs_sigprocmask), S("pthread_sigmask", bs_pthread_sigmask), S("sigsuspend", bs_sigsuspend), S("sigpending", bs_sigpending), S("signal", bs_signal), S("raise", bs_raise), S("pthread_kill", bs_pthread_kill), S("kill", bs_kill), S("setjmp", bs_setjmp), S("_setjmp", bs__setjmp), S("sigsetjmp", bs_sigsetjmp), S("longjmp", bs_longjmp), S("_longjmp", bs__longjmp), S("siglongjmp", bs_siglongjmp),
-  S("__errno", b_errno), S("__sF", b_sF), S("stdin", &b_stdin_p), S("stdout", &b_stdout_p), S("stderr", &b_stderr_p),
+  S("__errno", b_errno), S("gettimeofday", b_gettimeofday), S("settimeofday", b_settimeofday), S("utimes", b_utimes), S("select", b_select), S("__sF", b_sF), S("stdin", &b_stdin_p), S("stdout", &b_stdout_p), S("stderr", &b_stderr_p),
   S("fprintf", b_fprintf), S("vfprintf", b_vfprintf), S("fputs", b_fputs), S("fputc", b_fputc), S("fwrite", b_fwrite),
   S("fread", b_fread), S("fflush", b_fflush), S("fileno", b_fileno), S("fgetc", b_fgetc), S("getc", b_getc),
   S("fgets", b_fgets), S("feof", b_feof), S("ferror", b_ferror), S("freopen", b_freopen), S("isatty", b_isatty),
