@@ -1,3 +1,4 @@
+#include <dlfcn.h>
 #define _GNU_SOURCE
 // Minimal arm64 ELF shared-object loader: Android bionic .so -> iOS (or Linux host for testing)
 #include "elf_loader.h"
@@ -285,5 +286,11 @@ void so_describe(const char *tag, void *a) {
   for (so_module *m = g_mods; m; m = m->next)
     if ((uint8_t *)a >= (uint8_t *)m->base && (uint8_t *)a < (uint8_t *)m->base + m->size) {
       fprintf(stderr, "%s %p = %s+0x%lx\n", tag, a, m->name, (unsigned long)((uint8_t *)a - (uint8_t *)m->base)); return; }
+#ifdef __APPLE__
+  { Dl_info di; if (dladdr(a, &di) && di.dli_fname) {
+      const char *b = strrchr(di.dli_fname, '/'); b = b ? b + 1 : di.dli_fname;
+      fprintf(stderr, "%s %p = %s!%s+0x%lx\n", tag, a, b, di.dli_sname ? di.dli_sname : "?",
+              (unsigned long)((uint8_t *)a - (uint8_t *)(di.dli_saddr ? di.dli_saddr : di.dli_fbase))); return; } }
+#endif
   fprintf(stderr, "%s %p = ?\n", tag, a);
 }

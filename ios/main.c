@@ -112,7 +112,7 @@ static void dump_threads(void) {
       so_describe("pc", (void *)arm_thread_state64_get_pc(st));
       so_describe("lr", (void *)arm_thread_state64_get_lr(st));
       uint64_t *fp = (uint64_t *)arm_thread_state64_get_fp(st);
-      for (int k = 0; k < 20 && fp && ((uintptr_t)fp & 7) == 0; k++) { so_describe("bt", (void *)fp[1]); fp = (uint64_t *)fp[0]; }
+      for (int k = 0; k < 40 && fp && ((uintptr_t)fp & 7) == 0; k++) { so_describe("bt", (void *)fp[1]); fp = (uint64_t *)fp[0]; }
     }
     thread_resume(th[i]);
   }
@@ -122,7 +122,7 @@ static void *watchdog(void *a) {
   for (;;) {
     sleep(1); struct stat st; if (stat(g_logpath, &st)) continue;
     if (st.st_size != last) { last = st.st_size; idle = 0; continue; }
-    if (++idle == 8 && dumps < 3) { dumps++; dump_threads(); idle = -20; }
+    if (++idle == 8 && dumps < 2) { dumps++; dump_threads(); idle = -20; }
   }
   return a;
 }
