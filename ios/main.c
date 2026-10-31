@@ -132,6 +132,18 @@ int main(int argc, char **argv) {
   snprintf(wr, sizeof wr, "%s/write", g_docs); mkdir(wr, 0755);
   snprintf(lnk, sizeof lnk, "%s/garrysmod/runtime", g_docs);
   unlink(lnk); symlink(rt, lnk);  // bundle path changes per install
+  { // Windows GMod has no linux_fonts; engine (FreeType) needs them under platform/resource/linux_fonts
+    const char *fn[] = {"dejavusans.ttf", "dejavusans-bold.ttf", "dejavusans-oblique.ttf", "dejavusans-boldoblique.ttf", "liberationmono-regular.ttf"};
+    char d[1300], a[1400], b[1400]; snprintf(d, sizeof d, "%s/platform/resource/linux_fonts", g_docs); mkdir(d, 0755);
+    for (int i = 0; i < 5; i++) {
+      snprintf(a, sizeof a, "%s/platform/resource/linux_fonts/%s", rt, fn[i]); snprintf(b, sizeof b, "%s/%s", d, fn[i]);
+      struct stat st; if (!stat(b, &st) && st.st_size > 0) continue;
+      FILE *in = fopen(a, "rb"), *out = in ? fopen(b, "wb") : NULL; char buf[65536]; size_t n;
+      if (in && out) while ((n = fread(buf, 1, sizeof buf, in)) > 0) fwrite(buf, 1, n, out);
+      if (in) fclose(in); if (out) fclose(out);
+      fprintf(stderr, "font %s -> %s\n", fn[i], out ? "copied" : "FAILED");
+    }
+  }
   setenv("APP_LIB_PATH", lib, 1);
   setenv("APP_DATA_PATH", g_docs, 1);
   setenv("VALVE_GAME_PATH", g_docs, 1);
