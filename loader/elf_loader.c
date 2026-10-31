@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 // Minimal arm64 ELF shared-object loader: Android bionic .so -> iOS (or Linux host for testing)
 #include "elf_loader.h"
 #include <elf.h>
