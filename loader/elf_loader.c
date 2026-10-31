@@ -212,7 +212,10 @@ void so_init(so_module *m) {
   for (Elf64_Dyn *d = dyn; d->d_tag; d++) if (d->d_tag == DT_NEEDED) { so_module *dm = so_find(m->dynstr + d->d_un.d_val); if (dm) so_init(dm); }
   if (getenv("SO_VERBOSE")) fprintf(stderr, "init %s (%zu ctors)\n", m->name, m->init_count);
   for (size_t i = 0; i < m->init_count; i++)
-    if (m->init_array[i] && (intptr_t)m->init_array[i] != -1) m->init_array[i]();
+    if (m->init_array[i] && (intptr_t)m->init_array[i] != -1) {
+      if (getenv("SO_VERBOSE")) fprintf(stderr, "  ctor %s+0x%lx\n", m->name, (unsigned long)((char *)m->init_array[i] - (char *)m->base));
+      m->init_array[i]();
+    }
 }
 
 void so_tls_init_block(uint8_t *tp) {

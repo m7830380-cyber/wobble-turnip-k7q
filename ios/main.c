@@ -86,6 +86,7 @@ int main(int argc, char **argv) {
   setenv("SOURCEVR_WRITE_GAME_PATH", wr, 1);
   setenv("SOURCEVR_GAME", "garrysmod", 1);
   bionic_set_root(g_docs);
+  setenv("SO_MAP", "1", 1); setenv("SO_VERBOSE", "1", 1);
 
   platform_init();
   bionic_gl_proc = gl_proc;
