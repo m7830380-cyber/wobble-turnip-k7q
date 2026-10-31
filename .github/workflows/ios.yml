@@ -33,7 +33,7 @@ jobs:
           cp gmod ios/bundle/Info.plist $APP/
           ibtool --compile $APP/LaunchScreen.storyboardc ios/bundle/LaunchScreen.storyboard
           cp -R ref/Payload/hl2.app/Frameworks/{SDL2,libEGL,libGLESv2}.framework $APP/Frameworks/
-          cp apk/lib/arm64-v8a/*.so $APP/lib/; rm -f $APP/lib/libSDL2.so
+          cp apk/lib/arm64-v8a/*.so $APP/lib/; rm -f $APP/lib/libSDL2.so $APP/lib/libopenxr_loader.so
           (cd $APP/rt && unzip -q ../../../apk/assets/runtime.zip)
           codesign --entitlements ${3:-ios/entitlements.plist} --sign - --force --deep $APP
           codesign -d --entitlements - $APP/gmod || true

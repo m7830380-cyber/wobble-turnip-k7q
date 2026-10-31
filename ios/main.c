@@ -109,6 +109,7 @@ int main(int argc, char **argv) {
   bionic_gl_proc = gl_proc;
   so_set_libdir(lib);
   so_skip("libSDL2.so");
+  so_skip("libopenxr_loader.so");  // VR only; its ctor crashes on iOS
   bionic_init(host);
   so_set_late_resolver(late);
   so_set_resolver(bionic_resolve);
