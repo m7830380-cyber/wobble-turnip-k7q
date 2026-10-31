@@ -1,3 +1,4 @@
+#include <sys/sysctl.h>
 // bionic.c — Android bionic ABI shim for running GDroid's arm64 .so files on iOS (and Linux for host tests).
 // Provides: bionic-only symbols (__sF, __errno, *_chk, __system_property_get, android_log...),
 // struct translations where bionic layout != host layout (stat, dirent, FILE*), and the fake TLS block.
@@ -188,6 +189,15 @@ static char g_root[1024];
 void bionic_set_root(const char *r) { snprintf(g_root, sizeof g_root, "%s", r); }
 const char *bionic_path(const char *p) {
   static __thread char buf[2048];
+  if (p && !strcmp(p, "/proc/meminfo")) {
+    static char mi[1100]; static int done;
+    if (!done) { done = 1; snprintf(mi, sizeof mi, "%s/write/.meminfo", g_root);
+      unsigned long long tot = 0; size_t l = sizeof tot; sysctlbyname("hw.memsize", &tot, &l, NULL, 0);
+      unsigned long long kb = tot / 1024, fr = kb / 2;
+      FILE *f = fopen(mi, "w");
+      if (f) { fprintf(f, "MemTotal:       %llu kB\nMemFree:        %llu kB\nMemAvailable:   %llu kB\nBuffers:               0 kB\nCached:         %llu kB\nSwapCached:            0 kB\nSwapTotal:             0 kB\nSwapFree:              0 kB\n", kb, fr, fr, kb / 8); fclose(f); } }
+    return mi;
+  }
   if (p && g_root[0] && !strncmp(p, "/sdcard/", 8)) { snprintf(buf, sizeof buf, "%s/%s", g_root, p + 8); return buf; }
   return p;
 }
