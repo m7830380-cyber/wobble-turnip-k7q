@@ -3,6 +3,4 @@
 <plist version="1.0"><dict>
 <key>get-task-allow</key><true/>
 <key>dynamic-codesigning</key><true/>
-<key>com.apple.developer.kernel.increased-memory-limit</key><true/>
-<key>com.apple.developer.kernel.extended-virtual-addressing</key><true/>
 </dict></plist>
