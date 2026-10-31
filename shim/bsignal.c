@@ -1,3 +1,4 @@
+#include <stdio.h>
 // bionic arm64 signal/setjmp ABI translation.
 // bionic: sigset_t = 8 bytes (unsigned long), struct sigaction = {handler, sa_mask(8), int flags, restorer}
 // jmp_buf = long[32] (256 bytes). Host (glibc/Darwin) layouts differ, so translate.
@@ -67,7 +68,9 @@ static int sig_to_host(int s) { return s; }
 #endif
 typedef void (*bsh)(int);
 bsh bs_signal(int s, bsh h) { return signal(sig_to_host(s), h); }
-int bs_raise(int s) { return raise(sig_to_host(s)); }
+int bs_raise(int s) {
+  if (s == 5) { fprintf(stderr, "[shim] raise(SIGTRAP) ignored (engine debugger break)\n"); return 0; }
+  return raise(sig_to_host(s)); }
 int bs_pthread_kill(pthread_t t, int s) { return pthread_kill(t, sig_to_host(s)); }
 int bs_kill(int pid, int s) { return kill(pid, sig_to_host(s)); }
 

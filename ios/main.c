@@ -42,7 +42,9 @@ static int my_ShowSimpleMessageBox(unsigned flags, const char *title, const char
   if (++g_msgboxes > 3) return 0;
   return SDL_ShowSimpleMessageBox(flags, title, msg, NULL);
 }
+static int not_debugging(void) { return 0; }
 static void *host(const char *n) {
+  if (!strcmp(n, "Plat_IsInDebugSession")) return (void *)not_debugging;
   if (!strcmp(n, "SDL_ShowSimpleMessageBox")) return (void *)my_ShowSimpleMessageBox;
   if (lib_private(n)) return NULL;
   { void *g = glctx_resolve(n); if (g) return g; }
