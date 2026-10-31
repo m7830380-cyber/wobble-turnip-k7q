@@ -17,7 +17,9 @@ jobs:
         run: gcc -O1 -g -DBIONIC_HOST_TEST_NO_TP -Wno-unused-function -o m loader/elf_loader.c shim/bionic.c shim/jni.c shim/platform.c shim/bsignal.c shim/bsync.c shim/run_main.c -ldl -lpthread
       - name: Run under gdb
         run: |
-          mkdir -p out data/garrysmod && cp tools/fakegame/gameinfo.txt data/garrysmod/ && ln -s $PWD/apk/rt data/garrysmod/runtime && ln -s $PWD/apk/rt/platform data/platform
+          mkdir -p out
+          if GMKEY="${{ secrets.GMKEY }}" GH_TOKEN="${{ github.token }}" sh tools/getdata.sh; then echo REAL DATA; else
+            rm -rf data; mkdir -p data/garrysmod && cp tools/fakegame/gameinfo.txt data/garrysmod/ && ln -s $PWD/apk/rt data/garrysmod/runtime && ln -s $PWD/apk/rt/platform data/platform; fi
           export LIBDIR=$PWD/apk/lib/arm64-v8a APP_DATA_PATH=$PWD/data VALVE_GAME_PATH=$PWD/data SDL_VIDEODRIVER=x11 DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 SDL_VIDEO_X11_FORCE_EGL=1 SDL_OPENGL_ES_DRIVER=1 GL_VERBOSE=1 SDL_AUDIODRIVER=dummy SO_MAP=1 JNI_VERBOSE=1
           (Xvfb :99 -screen 0 1280x720x24 >/dev/null 2>&1 &); sleep 2
           timeout 600 gdb -q -batch -x tools/dbg.gdb --args ./m -game garrysmod > out/gdb.txt 2> out/stderr.txt || true
