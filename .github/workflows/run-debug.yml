@@ -14,7 +14,7 @@ jobs:
           curl -sL -o g.apk https://github.com/tinsarfal/GDroid/releases/download/0.1.30/GDroid-0.1.30.apk
           mkdir apk && cd apk && unzip -q ../g.apk 'lib/arm64-v8a/*'
       - name: Build
-        run: gcc -O1 -g -DBIONIC_HOST_TEST_NO_TP -Wno-unused-function -o m loader/elf_loader.c shim/bionic.c shim/jni.c shim/platform.c shim/run_main.c -ldl -lpthread
+        run: gcc -O1 -g -DBIONIC_HOST_TEST_NO_TP -Wno-unused-function -o m loader/elf_loader.c shim/bionic.c shim/jni.c shim/platform.c shim/bsignal.c shim/run_main.c -ldl -lpthread
       - name: Run under gdb
         run: |
           mkdir -p out data/garrysmod

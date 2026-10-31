@@ -243,10 +243,31 @@ static pthread_mutex_t *bmx(void *m) {
 }
 #endif
 
+extern char bs_sigemptyset[];
+extern char bs_sigfillset[];
+extern char bs_sigaddset[];
+extern char bs_sigdelset[];
+extern char bs_sigismember[];
+extern char bs_sigaction[];
+extern char bs_sigprocmask[];
+extern char bs_pthread_sigmask[];
+extern char bs_sigsuspend[];
+extern char bs_sigpending[];
+extern char bs_signal[];
+extern char bs_raise[];
+extern char bs_pthread_kill[];
+extern char bs_kill[];
+extern char bs_setjmp[];
+extern char bs__setjmp[];
+extern char bs_sigsetjmp[];
+extern char bs_longjmp[];
+extern char bs__longjmp[];
+extern char bs_siglongjmp[];
 /* ---------------- symbol table ---------------- */
 typedef struct { const char *n; void *p; } sym;
 #define S(name, fn) {name, (void *)(fn)}
 static sym g_syms[] = {
+  S("sigemptyset", bs_sigemptyset), S("sigfillset", bs_sigfillset), S("sigaddset", bs_sigaddset), S("sigdelset", bs_sigdelset), S("sigismember", bs_sigismember), S("sigaction", bs_sigaction), S("sigprocmask", bs_sigprocmask), S("pthread_sigmask", bs_pthread_sigmask), S("sigsuspend", bs_sigsuspend), S("sigpending", bs_sigpending), S("signal", bs_signal), S("raise", bs_raise), S("pthread_kill", bs_pthread_kill), S("kill", bs_kill), S("setjmp", bs_setjmp), S("_setjmp", bs__setjmp), S("sigsetjmp", bs_sigsetjmp), S("longjmp", bs_longjmp), S("_longjmp", bs__longjmp), S("siglongjmp", bs_siglongjmp),
   S("__errno", b_errno), S("__sF", b_sF), S("stdin", &b_stdin_p), S("stdout", &b_stdout_p), S("stderr", &b_stderr_p),
   S("fprintf", b_fprintf), S("vfprintf", b_vfprintf), S("fputs", b_fputs), S("fputc", b_fputc), S("fwrite", b_fwrite),
   S("fread", b_fread), S("fflush", b_fflush), S("fileno", b_fileno), S("fgetc", b_fgetc), S("getc", b_getc),
