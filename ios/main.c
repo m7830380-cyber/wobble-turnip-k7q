@@ -36,7 +36,14 @@ static int lib_private(const char *n) {
   for (int i = 0; pre[i]; i++) if (!strncmp(n, pre[i], strlen(pre[i]))) return 1;
   return 0;
 }
+static int g_msgboxes;
+static int my_ShowSimpleMessageBox(unsigned flags, const char *title, const char *msg, void *win) {
+  (void)win; fprintf(stderr, "\n*** MESSAGEBOX [%u] %s: %s\n", flags, title ? title : "", msg ? msg : "");
+  if (++g_msgboxes > 3) return 0;
+  return SDL_ShowSimpleMessageBox(flags, title, msg, NULL);
+}
 static void *host(const char *n) {
+  if (!strcmp(n, "SDL_ShowSimpleMessageBox")) return (void *)my_ShowSimpleMessageBox;
   if (lib_private(n)) return NULL;
   { void *g = glctx_resolve(n); if (g) return g; }
   void *p = platform_resolve(n);
