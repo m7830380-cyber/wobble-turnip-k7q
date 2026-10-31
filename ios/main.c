@@ -154,6 +154,7 @@ int main(int argc, char **argv) {
   setenv("SO_MAP", "1", 1); setenv("SO_VERBOSE", "1", 1);
 
   platform_init();
+  { extern void webview_init(void); webview_init(); }
   bionic_gl_proc = gl_proc;
   so_set_libdir(lib);
   so_skip("libSDL2.so");

@@ -279,13 +279,15 @@ void *jni_native(const char *cls, const char *name) {
   return NULL;
 }
 
-static jni_impl_entry *g_impls; static int g_nimpls;
-void jni_set_impls(jni_impl_entry *t, int n) { g_impls = t; g_nimpls = n; }
+static struct { jni_impl_entry *t; int n; } g_itabs[8]; static int g_nitabs;
+void jni_set_impls(jni_impl_entry *t, int n) { g_itabs[0].t = t; g_itabs[0].n = n; if (!g_nitabs) g_nitabs = 1; }
+void jni_add_impls(jni_impl_entry *t, int n) { if (!g_nitabs) g_nitabs = 1; if (g_nitabs < 8) { g_itabs[g_nitabs].t = t; g_itabs[g_nitabs].n = n; g_nitabs++; } }
 static jni_impl lookup_impl(const char *cls, const char *name, const char *sig) {
-  for (int i = 0; i < g_nimpls; i++) { jni_impl_entry *e = &g_impls[i];
+  for (int k = g_nitabs - 1; k >= 0; k--) for (int i = 0; i < g_itabs[k].n; i++) { jni_impl_entry *e = &g_itabs[k].t[i];
     if ((!e->cls || !strcmp(e->cls, cls)) && !strcmp(e->name, name) && (!e->sig || !strcmp(e->sig, sig))) return e->fn; }
   return NULL;
 }
+const void *jni_array_bytes(void *a, int *len) { jobj *o = O(a); if (len) *len = o ? o->len * o->esz : 0; return o ? o->data : NULL; }
 void *jni_new_object(const char *cls) { return mk(K_OBJECT, cls); }
 const char *jni_class_of(void *o) { jobj *j = O(o); return j ? j->cls : NULL; }
 

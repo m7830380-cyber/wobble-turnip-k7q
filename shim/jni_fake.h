@@ -16,3 +16,5 @@ jobj *jni_new_array(int n, int esz, const char *cls);
 const char *jni_str(void *p);
 void *jni_new_object(const char *cls);
 const char *jni_class_of(void *o);
+void jni_add_impls(jni_impl_entry *t, int n);
+const void *jni_array_bytes(void *a, int *len);
