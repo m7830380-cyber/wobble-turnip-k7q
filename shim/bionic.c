@@ -58,9 +58,12 @@ static void *thread_tramp(void *p) {
   bionic_thread_enter();
   return t.fn(t.arg);
 }
-static int b_pthread_create(pthread_t *th, const pthread_attr_t *a, void *(*fn)(void *), void *arg) {
+void bp_attr_to_host(const void *, pthread_attr_t *);
+static int b_pthread_create(pthread_t *th, const void *a, void *(*fn)(void *), void *arg) {
   struct tramp *t = malloc(sizeof *t); t->fn = fn; t->arg = arg;
-  int r = pthread_create(th, a, thread_tramp, t);
+  pthread_attr_t ha; bp_attr_to_host(a, &ha);
+  int r = pthread_create(th, &ha, thread_tramp, t);
+  pthread_attr_destroy(&ha);
   if (r) free(t);
   return r;
 }
@@ -243,6 +246,58 @@ static pthread_mutex_t *bmx(void *m) {
 }
 #endif
 
+extern char bp_mutexattr_init[];
+extern char bp_mutexattr_destroy[];
+extern char bp_mutexattr_settype[];
+extern char bp_mutexattr_gettype[];
+extern char bp_mutexattr_setpshared[];
+extern char bp_mutex_init[];
+extern char bp_mutex_destroy[];
+extern char bp_mutex_lock[];
+extern char bp_mutex_trylock[];
+extern char bp_mutex_unlock[];
+extern char bp_mutex_timedlock[];
+extern char bp_condattr_init[];
+extern char bp_condattr_destroy[];
+extern char bp_condattr_setclock[];
+extern char bp_condattr_getclock[];
+extern char bp_condattr_setpshared[];
+extern char bp_cond_init[];
+extern char bp_cond_destroy[];
+extern char bp_cond_signal[];
+extern char bp_cond_broadcast[];
+extern char bp_cond_wait[];
+extern char bp_cond_timedwait[];
+extern char bp_cond_timedwait_monotonic_np[];
+extern char bp_cond_timedwait_relative_np[];
+extern char bp_cond_clockwait[];
+extern char bp_rwlock_init[];
+extern char bp_rwlock_destroy[];
+extern char bp_rwlock_rdlock[];
+extern char bp_rwlock_wrlock[];
+extern char bp_rwlock_tryrdlock[];
+extern char bp_rwlock_trywrlock[];
+extern char bp_rwlock_unlock[];
+extern char bp_sem_init[];
+extern char bp_sem_destroy[];
+extern char bp_sem_post[];
+extern char bp_sem_wait[];
+extern char bp_sem_trywait[];
+extern char bp_sem_timedwait[];
+extern char bp_sem_getvalue[];
+extern char bp_attr_init[];
+extern char bp_attr_destroy[];
+extern char bp_attr_setdetachstate[];
+extern char bp_attr_getdetachstate[];
+extern char bp_attr_setstacksize[];
+extern char bp_attr_getstacksize[];
+extern char bp_attr_setguardsize[];
+extern char bp_attr_setschedparam[];
+extern char bp_attr_getschedparam[];
+extern char bp_attr_setschedpolicy[];
+extern char bp_attr_setscope[];
+extern char bp_once[];
+void bp_attr_to_host(const void *, pthread_attr_t *);
 extern char bs_sigemptyset[];
 extern char bs_sigfillset[];
 extern char bs_sigaddset[];
@@ -267,6 +322,7 @@ extern char bs_siglongjmp[];
 typedef struct { const char *n; void *p; } sym;
 #define S(name, fn) {name, (void *)(fn)}
 static sym g_syms[] = {
+  S("pthread_mutexattr_init", bp_mutexattr_init), S("pthread_mutexattr_destroy", bp_mutexattr_destroy), S("pthread_mutexattr_settype", bp_mutexattr_settype), S("pthread_mutexattr_gettype", bp_mutexattr_gettype), S("pthread_mutexattr_setpshared", bp_mutexattr_setpshared), S("pthread_mutex_init", bp_mutex_init), S("pthread_mutex_destroy", bp_mutex_destroy), S("pthread_mutex_lock", bp_mutex_lock), S("pthread_mutex_trylock", bp_mutex_trylock), S("pthread_mutex_unlock", bp_mutex_unlock), S("pthread_mutex_timedlock", bp_mutex_timedlock), S("pthread_condattr_init", bp_condattr_init), S("pthread_condattr_destroy", bp_condattr_destroy), S("pthread_condattr_setclock", bp_condattr_setclock), S("pthread_condattr_getclock", bp_condattr_getclock), S("pthread_condattr_setpshared", bp_condattr_setpshared), S("pthread_cond_init", bp_cond_init), S("pthread_cond_destroy", bp_cond_destroy), S("pthread_cond_signal", bp_cond_signal), S("pthread_cond_broadcast", bp_cond_broadcast), S("pthread_cond_wait", bp_cond_wait), S("pthread_cond_timedwait", bp_cond_timedwait), S("pthread_cond_timedwait_monotonic_np", bp_cond_timedwait_monotonic_np), S("pthread_cond_timedwait_relative_np", bp_cond_timedwait_relative_np), S("pthread_cond_clockwait", bp_cond_clockwait), S("pthread_rwlock_init", bp_rwlock_init), S("pthread_rwlock_destroy", bp_rwlock_destroy), S("pthread_rwlock_rdlock", bp_rwlock_rdlock), S("pthread_rwlock_wrlock", bp_rwlock_wrlock), S("pthread_rwlock_tryrdlock", bp_rwlock_tryrdlock), S("pthread_rwlock_trywrlock", bp_rwlock_trywrlock), S("pthread_rwlock_unlock", bp_rwlock_unlock), S("sem_init", bp_sem_init), S("sem_destroy", bp_sem_destroy), S("sem_post", bp_sem_post), S("sem_wait", bp_sem_wait), S("sem_trywait", bp_sem_trywait), S("sem_timedwait", bp_sem_timedwait), S("sem_getvalue", bp_sem_getvalue), S("pthread_attr_init", bp_attr_init), S("pthread_attr_destroy", bp_attr_destroy), S("pthread_attr_setdetachstate", bp_attr_setdetachstate), S("pthread_attr_getdetachstate", bp_attr_getdetachstate), S("pthread_attr_setstacksize", bp_attr_setstacksize), S("pthread_attr_getstacksize", bp_attr_getstacksize), S("pthread_attr_setguardsize", bp_attr_setguardsize), S("pthread_attr_setschedparam", bp_attr_setschedparam), S("pthread_attr_getschedparam", bp_attr_getschedparam), S("pthread_attr_setschedpolicy", bp_attr_setschedpolicy), S("pthread_attr_setscope", bp_attr_setscope), S("pthread_once", bp_once),
   S("sigemptyset", bs_sigemptyset), S("sigfillset", bs_sigfillset), S("sigaddset", bs_sigaddset), S("sigdelset", bs_sigdelset), S("sigismember", bs_sigismember), S("sigaction", bs_sigaction), S("sigprocmask", bs_sigprocmask), S("pthread_sigmask", bs_pthread_sigmask), S("sigsuspend", bs_sigsuspend), S("sigpending", bs_sigpending), S("signal", bs_signal), S("raise", bs_raise), S("pthread_kill", bs_pthread_kill), S("kill", bs_kill), S("setjmp", bs_setjmp), S("_setjmp", bs__setjmp), S("sigsetjmp", bs_sigsetjmp), S("longjmp", bs_longjmp), S("_longjmp", bs__longjmp), S("siglongjmp", bs_siglongjmp),
   S("__errno", b_errno), S("__sF", b_sF), S("stdin", &b_stdin_p), S("stdout", &b_stdout_p), S("stderr", &b_stderr_p),
   S("fprintf", b_fprintf), S("vfprintf", b_vfprintf), S("fputs", b_fputs), S("fputc", b_fputc), S("fwrite", b_fwrite),
