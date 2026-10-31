@@ -1,7 +1,7 @@
 name: run-debug
 on:
   push:
-    paths: ['loader/**', 'shim/**', '.github/workflows/run-debug.yml']
+    paths: ['loader/**', 'shim/**', 'tools/**', '.github/workflows/run-debug.yml']
   workflow_dispatch:
 jobs:
   run:
