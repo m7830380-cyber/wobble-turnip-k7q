@@ -1,0 +1,41 @@
+name: ios
+on:
+  push:
+    paths: ['ios/**', 'loader/**', 'shim/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+jobs:
+  ipa:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch APK, SDL2/ANGLE, SDL headers
+        run: |
+          brew install ldid >/dev/null
+          curl -sL -o g.apk https://github.com/tinsarfal/GDroid/releases/download/0.1.30/GDroid-0.1.30.apk
+          mkdir apk && (cd apk && unzip -q ../g.apk 'lib/arm64-v8a/*' 'assets/runtime.zip')
+          curl -sL -o ref.ipa https://github.com/ksagameng2/source-engine/releases/download/test/source-engine.ipa
+          unzip -q ref.ipa 'Payload/hl2.app/Frameworks/*' -d ref
+          ls ref/Payload/hl2.app/Frameworks
+          curl -sL https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz | tar xz
+      - name: Build
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          CC="xcrun --sdk iphoneos clang -target arm64-apple-ios14.0 -isysroot $SDK -O2 -g -Wno-unused-function -Wno-deprecated-declarations -ISDL2-2.30.9/include"
+          FW=ref/Payload/hl2.app/Frameworks
+          $CC -c loader/elf_loader.c -o el.o
+          for f in bionic jni platform bsignal bsync; do $CC -c shim/$f.c -o $f.o; done
+          $CC -c ios/main.c -o main.o
+          $CC -fobjc-arc -c ios/paths.m -o paths.o
+          $CC -o gmod *.o -F$FW -framework SDL2 -framework Foundation -framework UIKit -Wl,-rpath,@executable_path/Frameworks -Wl,-undefined,dynamic_lookup
+      - name: Package
+        run: |
+          APP=Payload/GMod.app; mkdir -p $APP/Frameworks $APP/lib $APP/rt
+          cp gmod ios/bundle/Info.plist ios/bundle/LaunchScreen.storyboard $APP/
+          cp -R ref/Payload/hl2.app/Frameworks/{SDL2,libEGL,libGLESv2}.framework $APP/Frameworks/
+          cp apk/lib/arm64-v8a/*.so $APP/lib/; rm -f $APP/lib/libSDL2.so
+          (cd $APP/rt && unzip -q ../../../apk/assets/runtime.zip)
+          for f in $APP/Frameworks/*.framework; do ldid -S "$f/$(basename $f .framework)"; done
+          ldid -Sios/entitlements.plist $APP/gmod
+          zip -qry GMod.tipa Payload; ls -la GMod.tipa
+      - uses: actions/upload-artifact@v4
+        with: { name: GMod-ipa, path: GMod.tipa }

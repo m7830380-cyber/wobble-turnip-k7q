@@ -321,6 +321,20 @@ extern char bs_siglongjmp[];
 /* ---------------- symbol table ---------------- */
 typedef struct { const char *n; void *p; } sym;
 #define S(name, fn) {name, (void *)(fn)}
+#ifdef __APPLE__
+/* bionic(Linux) mmap flags -> Darwin */
+static void *b_mmap(void *a, size_t l, int pr, int fl, int fd, off_t o) {
+  int f = fl & 3;
+  if (fl & 0x10) f |= MAP_FIXED;
+  if (fl & 0x20) f |= MAP_ANON;
+  if (fl & 0x4000) f |= MAP_NORESERVE;
+  return mmap(a, l, pr, f, (fl & 0x20) ? -1 : fd, o);
+}
+static int b_madvise(void *a, size_t l, int adv) { (void)a; (void)l; (void)adv; return 0; }
+#define APPLE_SYMS S("mmap", b_mmap), S("mmap64", b_mmap), S("madvise", b_madvise),
+#else
+#define APPLE_SYMS
+#endif
 static sym g_syms[] = {
   S("pthread_mutexattr_init", bp_mutexattr_init), S("pthread_mutexattr_destroy", bp_mutexattr_destroy), S("pthread_mutexattr_settype", bp_mutexattr_settype), S("pthread_mutexattr_gettype", bp_mutexattr_gettype), S("pthread_mutexattr_setpshared", bp_mutexattr_setpshared), S("pthread_mutex_init", bp_mutex_init), S("pthread_mutex_destroy", bp_mutex_destroy), S("pthread_mutex_lock", bp_mutex_lock), S("pthread_mutex_trylock", bp_mutex_trylock), S("pthread_mutex_unlock", bp_mutex_unlock), S("pthread_mutex_timedlock", bp_mutex_timedlock), S("pthread_condattr_init", bp_condattr_init), S("pthread_condattr_destroy", bp_condattr_destroy), S("pthread_condattr_setclock", bp_condattr_setclock), S("pthread_condattr_getclock", bp_condattr_getclock), S("pthread_condattr_setpshared", bp_condattr_setpshared), S("pthread_cond_init", bp_cond_init), S("pthread_cond_destroy", bp_cond_destroy), S("pthread_cond_signal", bp_cond_signal), S("pthread_cond_broadcast", bp_cond_broadcast), S("pthread_cond_wait", bp_cond_wait), S("pthread_cond_timedwait", bp_cond_timedwait), S("pthread_cond_timedwait_monotonic_np", bp_cond_timedwait_monotonic_np), S("pthread_cond_timedwait_relative_np", bp_cond_timedwait_relative_np), S("pthread_cond_clockwait", bp_cond_clockwait), S("pthread_rwlock_init", bp_rwlock_init), S("pthread_rwlock_destroy", bp_rwlock_destroy), S("pthread_rwlock_rdlock", bp_rwlock_rdlock), S("pthread_rwlock_wrlock", bp_rwlock_wrlock), S("pthread_rwlock_tryrdlock", bp_rwlock_tryrdlock), S("pthread_rwlock_trywrlock", bp_rwlock_trywrlock), S("pthread_rwlock_unlock", bp_rwlock_unlock), S("sem_init", bp_sem_init), S("sem_destroy", bp_sem_destroy), S("sem_post", bp_sem_post), S("sem_wait", bp_sem_wait), S("sem_trywait", bp_sem_trywait), S("sem_timedwait", bp_sem_timedwait), S("sem_getvalue", bp_sem_getvalue), S("pthread_attr_init", bp_attr_init), S("pthread_attr_destroy", bp_attr_destroy), S("pthread_attr_setdetachstate", bp_attr_setdetachstate), S("pthread_attr_getdetachstate", bp_attr_getdetachstate), S("pthread_attr_setstacksize", bp_attr_setstacksize), S("pthread_attr_getstacksize", bp_attr_getstacksize), S("pthread_attr_setguardsize", bp_attr_setguardsize), S("pthread_attr_setschedparam", bp_attr_setschedparam), S("pthread_attr_getschedparam", bp_attr_getschedparam), S("pthread_attr_setschedpolicy", bp_attr_setschedpolicy), S("pthread_attr_setscope", bp_attr_setscope), S("pthread_once", bp_once),
   S("sigemptyset", bs_sigemptyset), S("sigfillset", bs_sigfillset), S("sigaddset", bs_sigaddset), S("sigdelset", bs_sigdelset), S("sigismember", bs_sigismember), S("sigaction", bs_sigaction), S("sigprocmask", bs_sigprocmask), S("pthread_sigmask", bs_pthread_sigmask), S("sigsuspend", bs_sigsuspend), S("sigpending", bs_sigpending), S("signal", bs_signal), S("raise", bs_raise), S("pthread_kill", bs_pthread_kill), S("kill", bs_kill), S("setjmp", bs_setjmp), S("_setjmp", bs__setjmp), S("sigsetjmp", bs_sigsetjmp), S("longjmp", bs_longjmp), S("_longjmp", bs__longjmp), S("siglongjmp", bs_siglongjmp),
@@ -343,6 +357,7 @@ static sym g_syms[] = {
   S("sysconf", b_sysconf), S("prctl", b_prctl), S("pthread_create", b_pthread_create),
   S("dl_iterate_phdr", so_iterate_phdr), S("dlopen", b_dlopen), S("dlsym", b_dlsym), S("dlclose", b_dlclose), S("dlerror", b_dlerror),
   S("clock_gettime", b_clock_gettime),
+  APPLE_SYMS
   {0, 0}};
 
 static so_resolver g_next;

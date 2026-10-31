@@ -1,0 +1,99 @@
+// iOS entry: content lives in Documents (user copies garrysmod/ sourceengine/ platform/ via Files).
+// The app bundle only carries the Android .so code (lib/) and runtime assets (rt/).
+#include "../loader/elf_loader.h"
+#include "../shim/bionic.h"
+#include "../shim/jni_fake.h"
+#include "../shim/platform.h"
+#include <SDL.h>
+#include <SDL_main.h>
+#include <dlfcn.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+char *ios_bundle_path(void);
+char *ios_documents_path(void);
+
+static char g_bundle[1024], g_docs[1024];
+static void *g_gles, *g_egl;
+static void *gl_proc(const char *n) {
+  char p[1200];
+  if (!g_gles) { snprintf(p, sizeof p, "%s/Frameworks/libGLESv2.framework/libGLESv2", g_bundle); g_gles = dlopen(p, RTLD_NOW | RTLD_GLOBAL); }
+  if (!g_egl) { snprintf(p, sizeof p, "%s/Frameworks/libEGL.framework/libEGL", g_bundle); g_egl = dlopen(p, RTLD_NOW | RTLD_GLOBAL); }
+  void *r = NULL;
+  if (g_gles) r = dlsym(g_gles, n);
+  if (!r && g_egl) r = dlsym(g_egl, n);
+  if (!r) r = SDL_GL_GetProcAddress(n);
+  return r;
+}
+static void *host(const char *n) {
+  void *p = platform_resolve(n);
+  if (!p && !strncmp(n, "SDL_", 4)) p = dlsym(RTLD_DEFAULT, n);
+  if (!p && (!strncmp(n, "gl", 2) || !strncmp(n, "egl", 3))) p = gl_proc(n);
+  if (!p) p = dlsym(RTLD_DEFAULT, n);
+  return p;
+}
+static long stub0(void) { return 0; }
+static void *late(const char *n) { fprintf(stderr, "stub %s\n", n); return (void *)stub0; }
+
+static int exists(const char *a, const char *b) {
+  char p[1200]; struct stat st; snprintf(p, sizeof p, "%s/%s", a, b); return stat(p, &st) == 0;
+}
+
+static void wait_for_content(void) {
+  while (!exists(g_docs, "garrysmod/garrysmod_dir.vpk") && !exists(g_docs, "garrysmod/gameinfo.txt")) {
+    char msg[2048];
+    snprintf(msg, sizeof msg,
+             "Game files not found.\n\nOpen the Files app -> On My iPhone -> this app, and copy these folders from your "
+             "Garry's Mod install:\n  garrysmod\n  sourceengine\n  platform\n\nThen tap Retry.\n\n(%s)", g_docs);
+    const SDL_MessageBoxButtonData btn[] = {{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Retry"}};
+    SDL_MessageBoxData d = {SDL_MESSAGEBOX_INFORMATION, NULL, "GMod", msg, 1, btn, NULL};
+    int b; SDL_ShowMessageBox(&d, &b);
+  }
+}
+
+int main(int argc, char **argv) {
+  snprintf(g_bundle, sizeof g_bundle, "%s", ios_bundle_path());
+  snprintf(g_docs, sizeof g_docs, "%s", ios_documents_path());
+  char lib[1200], wr[1200], rt[1200], lnk[1200], log[1200];
+  snprintf(log, sizeof log, "%s/gmod_log.txt", g_docs);
+  freopen(log, "w", stderr); setvbuf(stderr, NULL, _IONBF, 0);
+  SDL_Init(SDL_INIT_VIDEO);  // needed for message box; engine re-inits
+  wait_for_content();
+
+  snprintf(lib, sizeof lib, "%s/lib", g_bundle);
+  snprintf(rt, sizeof rt, "%s/rt", g_bundle);
+  snprintf(wr, sizeof wr, "%s/write", g_docs); mkdir(wr, 0755);
+  snprintf(lnk, sizeof lnk, "%s/garrysmod/runtime", g_docs);
+  unlink(lnk); symlink(rt, lnk);  // bundle path changes per install
+  setenv("APP_LIB_PATH", lib, 1);
+  setenv("APP_DATA_PATH", g_docs, 1);
+  setenv("VALVE_GAME_PATH", g_docs, 1);
+  setenv("SOURCEVR_SHARED_CONTENT_PATH", g_docs, 1);
+  setenv("SOURCEVR_WRITE_GAME_PATH", wr, 1);
+  setenv("SOURCEVR_GAME", "garrysmod", 1);
+  bionic_set_root(g_docs);
+
+  platform_init();
+  bionic_gl_proc = gl_proc;
+  so_set_libdir(lib);
+  so_skip("libSDL2.so");
+  bionic_init(host);
+  so_set_late_resolver(late);
+  so_set_resolver(bionic_resolve);
+  char p[1300]; snprintf(p, sizeof p, "%s/liblauncher.so", lib);
+  int u = 0; so_module *m = so_load(p, &u);
+  if (!m) { fprintf(stderr, "load failed\n"); return 1; }
+  fprintf(stderr, "loaded, unresolved=%d\n", u);
+  bionic_thread_enter();
+  so_init_all();
+  int (*jni_onload)(void *, void *) = so_sym(m, "JNI_OnLoad");
+  if (jni_onload) jni_onload(jni_vm(), NULL);
+  int (*lma)(int, char **) = so_sym(m, "LauncherMainAndroid");
+  char *av[] = {"gmod", "-game", "garrysmod", NULL};
+  int r = lma(3, av);
+  fprintf(stderr, "LauncherMainAndroid returned %d\n", r);
+  return r;
+}

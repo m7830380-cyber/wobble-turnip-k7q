@@ -1,7 +1,8 @@
 #define _GNU_SOURCE
 // Minimal arm64 ELF shared-object loader: Android bionic .so -> iOS (or Linux host for testing)
 #include "elf_loader.h"
-#include <elf.h>
+#include "elf_compat.h"
+#include <stddef.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -226,7 +227,12 @@ void so_init_all(void) {
   while (n--) so_init(v[n]);  /* load order */
 }
 
+#ifndef __APPLE__
 #include <link.h>
+#else
+#define ELFMAG "\177ELF"
+#define SELFMAG 4
+#endif
 // report loaded ELF modules (bionic dl_phdr_info layout == glibc on aarch64 for first 4 fields)
 int so_iterate_phdr(int (*cb_)(void *, size_t, void *), void *data) {
   int (*cb)(struct dl_phdr_info *, size_t, void *) = (void *)cb_;
@@ -239,5 +245,9 @@ int so_iterate_phdr(int (*cb_)(void *, size_t, void *), void *data) {
     int r = cb(&i, offsetof(struct dl_phdr_info, dlpi_adds), data);
     if (r) return r;
   }
+#ifdef __APPLE__
+  return 0;
+#else
   return dl_iterate_phdr(cb, data);
+#endif
 }
