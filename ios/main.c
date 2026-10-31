@@ -43,9 +43,21 @@ static int my_ShowSimpleMessageBox(unsigned flags, const char *title, const char
   return SDL_ShowSimpleMessageBox(flags, title, msg, NULL);
 }
 static int not_debugging(void) { return 0; }
+/* LuaJIT machine code crashes on iOS (debugger freezes the faulting thread) -> interpreter only */
+static void *lua_real(const char *n) { so_module *m = so_find("liblua_shared.so"); return m ? so_sym(m, n) : NULL; }
+static void *my_luaL_newstate(void) {
+  void *(*f)(void) = lua_real("luaL_newstate"); void *L = f(); 
+  int (*sm)(void *, int, int) = lua_real("luaJIT_setmode"); if (L && sm) fprintf(stderr, "[lua] JIT off %p: %d\n", L, sm(L, 0, 0));
+  return L; }
+static void *my_lua_newstate(void *a, void *ud) {
+  void *(*f)(void *, void *) = lua_real("lua_newstate"); void *L = f(a, ud);
+  int (*sm)(void *, int, int) = lua_real("luaJIT_setmode"); if (L && sm) fprintf(stderr, "[lua] JIT off %p: %d\n", L, sm(L, 0, 0));
+  return L; }
 static void *host(const char *n) {
   if (!strcmp(n, "Plat_IsInDebugSession")) return (void *)not_debugging;
   if (!strcmp(n, "SDL_ShowSimpleMessageBox")) return (void *)my_ShowSimpleMessageBox;
+  if (!strcmp(n, "luaL_newstate") && lua_real(n)) return (void *)my_luaL_newstate;
+  if (!strcmp(n, "lua_newstate") && lua_real(n)) return (void *)my_lua_newstate;
   if (lib_private(n)) return NULL;
   { void *g = glctx_resolve(n); if (g) return g; }
   void *p = platform_resolve(n);
