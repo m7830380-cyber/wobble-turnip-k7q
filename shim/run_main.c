@@ -10,6 +10,7 @@
 #include <string.h>
 
 static void *g_sdl;
+static void *gl_proc(const char *n);
 static void *host(const char *n) {
   void *p = platform_resolve(n);
   if (!p && g_sdl && !strncmp(n, "SDL_", 4)) p = dlsym(g_sdl, n);
