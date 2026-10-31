@@ -35,7 +35,7 @@ jobs:
           cp -R ref/Payload/hl2.app/Frameworks/{SDL2,libEGL,libGLESv2}.framework $APP/Frameworks/
           cp apk/lib/arm64-v8a/*.so $APP/lib/; rm -f $APP/lib/libSDL2.so
           (cd $APP/rt && unzip -q ../../../apk/assets/runtime.zip)
-          codesign --entitlements ios/entitlements.plist --sign - --force --deep $APP
+          codesign --entitlements ${3:-ios/entitlements.plist} --sign - --force --deep $APP
           codesign -d --entitlements - $APP/gmod || true
           otool -L $APP/gmod; for f in $APP/Frameworks/*.framework; do otool -L $f/$(basename $f .framework) | head -5; done; otool -l $APP/gmod | grep -A3 LC_RPATH || true
           zip -qry GMod.tipa Payload; ls -la GMod.tipa
@@ -45,11 +45,11 @@ jobs:
           CC="xcrun --sdk iphoneos clang -target arm64-apple-ios14.0 -isysroot $SDK -fobjc-arc"
           mk() { rm -rf T; mkdir -p T/Payload; cp -R $2 T/Payload/GMod.app; A=T/Payload/GMod.app
             $CC -DHELLO_TEXT="\"$1\"" ios/hello.m -framework UIKit -o $A/gmod
-            codesign --entitlements ios/entitlements.plist --sign - --force --deep $A
+            codesign --entitlements ${3:-ios/entitlements.plist} --sign - --force --deep $A
             (cd T && zip -qry ../$1.tipa Payload); }
           mkdir -p E/GMod.app; cp ios/bundle/Info.plist E/GMod.app/; cp -R Payload/GMod.app/LaunchScreen.storyboardc E/GMod.app/
-          mk TestA_bare E/GMod.app
-          mk TestB_fullbundle Payload/GMod.app
+          mk TestC_noJIT E/GMod.app ios/ent_min.plist
+          mk TestD_noJIT_full Payload/GMod.app ios/ent_min.plist
           ls -la *.tipa
       - uses: actions/upload-artifact@v4
         with: { name: tests, path: "Test*.tipa" }
