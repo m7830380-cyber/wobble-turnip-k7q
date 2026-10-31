@@ -55,28 +55,3 @@ jobs:
         with: { name: tests, path: "Test*.tipa" }
       - uses: actions/upload-artifact@v4
         with: { name: GMod-ipa, path: GMod.tipa }
-      - name: Hello
-        run: |
-          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          H=hp/Payload/GMod.app; mkdir -p $H
-          xcrun --sdk iphoneos clang -target arm64-apple-ios14.0 -isysroot $SDK -fobjc-arc ios/hello.m -o $H/gmod -framework UIKit -framework Foundation
-          cp ios/bundle/Info.plist $H/
-          ibtool --compile $H/LaunchScreen.storyboardc ios/bundle/LaunchScreen.storyboard
-          codesign --entitlements ios/entitlements.plist --sign - --force --deep $H
-          (cd hp && zip -qry ../Hello.tipa Payload)
-      - name: Test IPAs
-        run: |
-          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          CC="xcrun --sdk iphoneos clang -target arm64-apple-ios14.0 -isysroot $SDK -fobjc-arc"
-          mk() { rm -rf T; mkdir -p T/Payload; cp -R $2 T/Payload/GMod.app; A=T/Payload/GMod.app
-            $CC -DHELLO_TEXT="\"$1\"" ios/hello.m -framework UIKit -o $A/gmod
-            codesign --entitlements ios/entitlements.plist --sign - --force --deep $A
-            (cd T && zip -qry ../$1.tipa Payload); }
-          mkdir -p E/GMod.app; cp ios/bundle/Info.plist E/GMod.app/; cp -R Payload/GMod.app/LaunchScreen.storyboardc E/GMod.app/
-          mk TestA_bare E/GMod.app
-          mk TestB_fullbundle Payload/GMod.app
-          ls -la *.tipa
-      - uses: actions/upload-artifact@v4
-        with: { name: tests, path: "Test*.tipa" }
-      - uses: actions/upload-artifact@v4
-        with: { name: Hello-ipa, path: Hello.tipa }

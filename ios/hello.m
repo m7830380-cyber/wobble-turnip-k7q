@@ -8,7 +8,7 @@
   UIViewController *vc = [UIViewController new];
   vc.view.backgroundColor = UIColor.systemGreenColor;
   UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(60, 60, 700, 80)];
-  l.text = @HELLO_TEXT; l.font = [UIFont boldSystemFontOfSize:36];
+  l.text = @"" HELLO_TEXT; l.font = [UIFont boldSystemFontOfSize:36];
   [vc.view addSubview:l];
   self.window.rootViewController = vc; [self.window makeKeyAndVisible];
   return YES;
