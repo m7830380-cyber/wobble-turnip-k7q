@@ -1,0 +1,15 @@
+name: jadx
+on: workflow_dispatch
+jobs:
+  d:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          curl -sL -o g.apk https://github.com/tinsarfal/GDroid/releases/download/0.1.30/GDroid-0.1.30.apk
+          curl -sL -o j.zip https://github.com/skylot/jadx/releases/download/v1.5.1/jadx-1.5.1.zip
+          unzip -q j.zip -d jadx
+          jadx/bin/jadx -d out --no-res g.apk || true
+          mkdir src; cp -r out/sources/com/sourcevrport src/ 2>/dev/null; find out/sources -path '*gmodvr*' -name '*.java' -exec cp --parents {} src/ \;
+          ls -R src | head -100
+      - uses: actions/upload-artifact@v4
+        with: {name: java, path: src}

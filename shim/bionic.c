@@ -197,6 +197,37 @@ static int b_fstat(int fd, struct bstat *b) { struct stat h; int r = fstat(fd, &
 
 /* ---------------- dirent (bionic: ino u64, off i64, reclen u16, type u8, name[256]) ---------------- */
 struct bdirent { uint64_t d_ino; int64_t d_off; uint16_t d_reclen; uint8_t d_type; char d_name[256]; };
+static int b_alphasort(const struct bdirent **a, const struct bdirent **b) { return strcoll((*a)->d_name, (*b)->d_name); }
+static int b_scandir(const char *dir, struct bdirent ***out, int (*flt)(const struct bdirent *), int (*cmp)(const struct bdirent **, const struct bdirent **)) {
+  DIR *d = opendir(bionic_path(dir)); if (!d) return -1;
+  struct bdirent **v = NULL; int n = 0, cap = 0; struct dirent *e;
+  while ((e = readdir(d))) {
+    struct bdirent *b = calloc(1, sizeof *b);
+    b->d_ino = e->d_ino; b->d_reclen = sizeof *b; b->d_type = e->d_type; snprintf(b->d_name, sizeof b->d_name, "%s", e->d_name);
+    if (flt && !flt(b)) { free(b); continue; }
+    if (n == cap) { cap = cap ? cap * 2 : 32; v = realloc(v, cap * sizeof *v); }
+    v[n++] = b;
+  }
+  closedir(d);
+  if (cmp && n > 1) qsort(v, n, sizeof *v, (int (*)(const void *, const void *))cmp);
+  *out = v; return n;
+}
+#include <fnmatch.h>
+static int b_fnmatch(const char *p, const char *s, int f) {
+  int o = 0; if (f & 1) o |= FNM_PATHNAME; if (f & 2) o |= FNM_NOESCAPE; if (f & 4) o |= FNM_PERIOD;
+#ifdef FNM_CASEFOLD
+  if (f & 16) o |= FNM_CASEFOLD;
+#endif
+  return fnmatch(p, s, o) ? 1 : 0;
+}
+#include <sys/resource.h>
+static int b_getrusage(int who, long *u) {
+  struct rusage r; int x = getrusage(who, &r); if (x) return x;
+  memset(u, 0, 144); u[0] = r.ru_utime.tv_sec; u[1] = r.ru_utime.tv_usec; u[2] = r.ru_stime.tv_sec; u[3] = r.ru_stime.tv_usec;
+  u[4] = r.ru_maxrss; return 0;
+}
+static int b_statfs64(const char *p, void *b) { (void)p; memset(b, 0, 120); ((long *)b)[0] = 0xEF53; ((long *)b)[1] = 4096;
+  ((uint64_t *)b)[2] = 1ULL << 24; ((uint64_t *)b)[3] = 1ULL << 23; ((uint64_t *)b)[4] = 1ULL << 23; return 0; }
 static struct bdirent *b_readdir(DIR *d) {
   static __thread struct bdirent out;
   struct dirent *e = readdir(d);
@@ -401,7 +432,7 @@ static sym g_syms[] = {
   S("__readlink_chk", b_readlink_chk), S("__FD_SET_chk", b_FD_SET_chk), S("__FD_ISSET_chk", b_FD_ISSET_chk),
   S("__open_2", b_open_2), S("__stack_chk_fail", b_stack_chk_fail), S("__stack_chk_guard", &bionic_stack_guard),
   S("open", b_open), S("openat", b_openat), S("stat", b_stat), S("lstat", b_lstat), S("fstat", b_fstat),
-  S("readdir", b_readdir), S("opendir", b_opendir), S("fopen", b_fopen), S("access", b_access), S("mkdir", b_mkdir),
+  S("readdir", b_readdir), S("scandir", b_scandir), S("alphasort", b_alphasort), S("fnmatch", b_fnmatch), S("getrusage", b_getrusage), S("statfs64", b_statfs64), S("statfs", b_statfs64), S("opendir", b_opendir), S("fopen", b_fopen), S("access", b_access), S("mkdir", b_mkdir),
   S("__system_property_get", b_system_property_get), S("__android_log_write", b_log_write),
   S("__android_log_print", b_log_print), S("__android_log_vprint", b_log_vprint), S("__assert2", b_assert2),
   S("android_set_abort_message", b_set_abort_message), S("getauxval", b_getauxval),
