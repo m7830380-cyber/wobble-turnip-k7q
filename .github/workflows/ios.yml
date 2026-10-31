@@ -1,7 +1,7 @@
 name: ios
 on:
   push:
-    paths: ['ios/**', 'loader/**', 'shim/**', '.github/workflows/ios.yml']
+    paths: ['ios/**', 'loader/**', 'shim/**', 'tools/**', '.github/workflows/ios.yml']
   workflow_dispatch:
 jobs:
   ipa:
