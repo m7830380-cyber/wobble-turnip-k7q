@@ -1,0 +1,40 @@
+name: scan
+on: [workflow_dispatch, push]
+jobs:
+  scan:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch APK
+        run: |
+          curl -sL -o g.apk https://github.com/tinsarfal/GDroid/releases/download/0.1.30/GDroid-0.1.30.apk
+          mkdir apk && cd apk && unzip -q ../g.apk 'lib/arm64-v8a/*'
+      - name: Scan
+        run: |
+          L=apk/lib/arm64-v8a; mkdir -p out
+          # x18 usage (iOS clobbers x18)
+          for f in $L/*.so; do
+            objdump -d --no-show-raw-insn $f | grep -E '\b[xw]18\b' | sed "s|^|$(basename $f): |" ; done > out/x18.txt || true
+          # TLS access sequences
+          for f in $L/*.so; do
+            objdump -d --no-show-raw-insn $f | grep -E 'tpidr_el0' | sed "s|^|$(basename $f): |" ; done > out/tpidr.txt || true
+          # svc direct syscalls
+          for f in $L/*.so; do
+            objdump -d --no-show-raw-insn $f | grep -E '\bsvc\b' | sed "s|^|$(basename $f): |" ; done > out/svc.txt || true
+          # externals
+          for f in $L/*.so; do nm -D --undefined-only $f | awk '{print $2}' | sed 's/@.*//'; done | sort -u > u.txt
+          for f in $L/*.so; do nm -D --defined-only $f | awk '{print $3}'; done | sort -u > d.txt
+          comm -23 u.txt d.txt > out/externals.txt
+          for f in $L/*.so; do echo "== $(basename $f)"; readelf -d $f | grep NEEDED; done > out/needed.txt
+          strings $L/libSDL2.so | grep -E '^2\.[0-9]+\.[0-9]+$|SDL-2' | head > out/sdl.txt || true
+          {
+            echo "x18 lines:"; wc -l < out/x18.txt; cut -d: -f1 out/x18.txt | sort | uniq -c
+            echo "tpidr lines:"; cut -d: -f1 out/tpidr.txt | sort | uniq -c
+            echo "svc lines:"; cut -d: -f1 out/svc.txt | sort | uniq -c
+            echo "externals: $(wc -l < out/externals.txt)"
+            echo "sdl:"; cat out/sdl.txt
+            echo "x18 sample:"; head -40 out/x18.txt
+          } > out/summary.txt
+          cat out/summary.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: scan, path: out }

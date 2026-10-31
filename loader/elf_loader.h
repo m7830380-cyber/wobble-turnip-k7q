@@ -1,0 +1,18 @@
+#pragma once
+#include <stddef.h>
+#include <stdint.h>
+typedef struct so_module {
+  struct so_module *next;
+  char name[128];
+  uint8_t *base; size_t size;
+  void *dyn, *dynsym; char *dynstr; size_t nsyms;
+  void (**init_array)(void); size_t init_count;
+  void *tls_init; size_t tls_filesz, tls_memsz;
+} so_module;
+typedef void *(*so_resolver)(const char *name);
+void so_set_resolver(so_resolver r);
+so_module *so_load(const char *path, int *unresolved);
+void so_set_libdir(const char *d);
+so_module *so_find(const char *name);
+void so_init(so_module *m);
+void *so_sym(so_module *m, const char *name);
