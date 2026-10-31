@@ -26,7 +26,7 @@ jobs:
           for f in bionic jni platform bsignal bsync; do $CC -c shim/$f.c -o $f.o; done
           $CC -c ios/main.c -o main.o
           $CC -fobjc-arc -c ios/paths.m -o paths.o
-          $CC -o gmod *.o -F$FW -framework SDL2 -framework Foundation -framework UIKit -Wl,-rpath,@executable_path/Frameworks
+          $CC -o gmod *.o -F$FW -framework SDL2 -framework Foundation -framework UIKit -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path/Frameworks/SDL2.framework -Wl,-rpath,@executable_path/Frameworks/libEGL.framework -Wl,-rpath,@executable_path/Frameworks/libGLESv2.framework
       - name: Package
         run: |
           APP=Payload/GMod.app; mkdir -p $APP/Frameworks $APP/lib $APP/rt
