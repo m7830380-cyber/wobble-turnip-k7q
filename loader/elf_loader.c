@@ -93,7 +93,7 @@ static Elf64_Rela *aps2_decode(const uint8_t *p, size_t sz, size_t *out_n) {
 size_t so_tls_static_off = 0x200;   // where the first module's TLS begins, relative to tp
 size_t so_tls_static_used = 0;      // bytes allocated so far
 __asm__(".text\n.globl so_tlsdesc_static\nso_tlsdesc_static:\n ldr x0, [x0, #8]\n ret\n");
-extern char so_tlsdesc_static[];
+extern char so_tlsdesc_static[] __asm__("so_tlsdesc_static");
 static char g_libdir[512];
 static const char *g_skip[32]; static int g_nskip;
 void so_skip(const char *name) { if (g_nskip < 32) g_skip[g_nskip++] = name; }

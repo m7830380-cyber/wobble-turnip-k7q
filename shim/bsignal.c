@@ -48,6 +48,7 @@ int bs_sigaction(int sig, const struct bsigaction *a, struct bsigaction *o) {
   if (r == 0 && o) { o->handler = (void *)ho.sa_sigaction; to_bionic(&o->mask, &ho.sa_mask); o->flags = fl_to_b(ho.sa_flags); o->restorer = 0; }
   return r;
 }
+int bs_sigprocmask(int how, const bsigset_t *s, bsigset_t *o) __asm__("bs_sigprocmask");
 int bs_sigprocmask(int how, const bsigset_t *s, bsigset_t *o) {
   sigset_t h, ho; to_host(&h, s); int r = sigprocmask(how, s ? &h : NULL, &ho); if (!r) to_bionic(o, &ho); return r;
 }
