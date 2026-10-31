@@ -20,11 +20,10 @@ def fix(path):
     data = bytearray(open(path, 'rb').read())
     with open(path, 'rb') as f:
         e = ELFFile(f)
-        text = [s for s in e.iter_sections() if s['sh_flags'] & 4]
+        segs = [(g['p_vaddr'], g['p_filesz'], g['p_offset']) for g in e.iter_segments() if g['p_type'] == 'PT_LOAD']
         def off(va):
-            for seg in e.iter_segments():
-                if seg['p_type'] == 'PT_LOAD' and seg['p_vaddr'] <= va < seg['p_vaddr'] + seg['p_filesz']:
-                    return va - seg['p_vaddr'] + seg['p_offset']
+            for v, fs, o in segs:
+                if v <= va < v + fs: return va - v + o
         ranges = []
         if e.has_dwarf_info():
             d = e.get_dwarf_info()
