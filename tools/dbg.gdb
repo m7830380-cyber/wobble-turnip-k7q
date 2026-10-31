@@ -6,15 +6,9 @@ handle SIGBUS stop nopass
 handle SIGILL stop nopass
 handle SIGABRT stop nopass
 handle SIGPIPE nostop noprint pass
+handle SIGTRAP nostop print nopass
 break run_main.c:44
 run
-break new_do_write
-commands
-silent
-printf "WRITE f=%p n=%d\n", $x0, $x2
-bt 5
-continue
-end
 continue
 bt 30
 info registers
