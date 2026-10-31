@@ -80,12 +80,46 @@ static void on_crash(int sig, siginfo_t *si, void *uc_) {
   signal(sig, SIG_DFL); raise(sig);
 }
 
+
+#include <mach/mach.h>
+#include <pthread.h>
+static char g_logpath[1200];
+static void dump_threads(void) {
+  thread_act_array_t th; mach_msg_type_number_t n; thread_t self = mach_thread_self();
+  if (task_threads(mach_task_self(), &th, &n)) return;
+  fprintf(stderr, "\n=== WATCHDOG: log idle, %u threads ===\n", n);
+  for (unsigned i = 0; i < n; i++) {
+    if (th[i] == self) continue;
+    thread_suspend(th[i]);
+    arm_thread_state64_t st; mach_msg_type_number_t c = ARM_THREAD_STATE64_COUNT;
+    if (!thread_get_state(th[i], ARM_THREAD_STATE64, (thread_state_t)&st, &c)) {
+      fprintf(stderr, "--- thread %u\n", i);
+      so_describe("pc", (void *)arm_thread_state64_get_pc(st));
+      so_describe("lr", (void *)arm_thread_state64_get_lr(st));
+      uint64_t *fp = (uint64_t *)arm_thread_state64_get_fp(st);
+      for (int k = 0; k < 20 && fp && ((uintptr_t)fp & 7) == 0; k++) { so_describe("bt", (void *)fp[1]); fp = (uint64_t *)fp[0]; }
+    }
+    thread_resume(th[i]);
+  }
+}
+static void *watchdog(void *a) {
+  off_t last = -1; int idle = 0, dumps = 0;
+  for (;;) {
+    sleep(1); struct stat st; if (stat(g_logpath, &st)) continue;
+    if (st.st_size != last) { last = st.st_size; idle = 0; continue; }
+    if (++idle == 8 && dumps < 3) { dumps++; dump_threads(); idle = -20; }
+  }
+  return a;
+}
+
 int main(int argc, char **argv) {
   snprintf(g_bundle, sizeof g_bundle, "%s", ios_bundle_path());
   snprintf(g_docs, sizeof g_docs, "%s", ios_documents_path());
   char lib[1200], wr[1200], rt[1200], lnk[1200], log[1200];
   snprintf(log, sizeof log, "%s/gmod_log.txt", g_docs);
   freopen(log, "w", stderr); setvbuf(stderr, NULL, _IONBF, 0);
+  snprintf(g_logpath, sizeof g_logpath, "%s", log);
+  { pthread_t t; pthread_create(&t, NULL, watchdog, NULL); pthread_detach(t); }
   setenv("SO_MAP", "1", 1); setenv("SO_VERBOSE", "1", 1);
   { struct sigaction sa = {0}; sa.sa_sigaction = on_crash; sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
     static char alt[65536]; stack_t ss = {alt, 0, sizeof alt}; sigaltstack(&ss, NULL);
