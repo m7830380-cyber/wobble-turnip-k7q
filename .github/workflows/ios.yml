@@ -23,7 +23,7 @@ jobs:
           CC="xcrun --sdk iphoneos clang -target arm64-apple-ios14.0 -isysroot $SDK -O2 -g -Wno-unused-function -Wno-deprecated-declarations -ISDL2-2.30.9/include"
           FW=ref/Payload/hl2.app/Frameworks
           $CC -c loader/elf_loader.c -o el.o
-          for f in bionic jni platform bsignal bsync avarg; do $CC -c shim/$f.c -o $f.o; done
+          for f in bionic jni platform bsignal bsync avarg bsock; do $CC -c shim/$f.c -o $f.o; done
           $CC -c ios/main.c -o main.o
           $CC -fobjc-arc -c ios/paths.m -o paths.o
           $CC -fobjc-arc -c ios/glctx.m -o glctx.o

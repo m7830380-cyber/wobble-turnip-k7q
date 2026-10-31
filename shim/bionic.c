@@ -389,12 +389,14 @@ static sym g_syms[] = {
 static so_resolver g_next;
 #ifdef __APPLE__
 void *avarg_resolve(const char *name);
+void *bsock_resolve(const char *name);
 #endif
 FILE *bionic_xf(FILE *f) { return xf(f); }
 int bionic_log_write(int p, const char *tag, const char *msg) { return b_log_write(p, tag, msg); }
 void *bionic_resolve(const char *n) {
 #ifdef __APPLE__
   { void *v = avarg_resolve(n); if (v) return v; }
+  { void *v = bsock_resolve(n); if (v) return v; }
 #endif
   for (sym *s = g_syms; s->n; s++) if (!strcmp(s->n, n)) return s->p;
   void *p = g_next ? g_next(n) : NULL;
