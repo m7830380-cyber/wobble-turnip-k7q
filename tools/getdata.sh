@@ -7,7 +7,7 @@ mkdir -p data gd && cd gd
 gh release download gamedata -R $R -p '*.bin' || { echo "no gamedata"; exit 1; }
 printf %s "$GMKEY" > k
 dec() { openssl enc -d -aes-256-cbc -pbkdf2 -pass file:k; }
-dec < loose.bin | tar xf - -C ../data && rm loose.bin
+for l in loose.bin se_loose.bin; do dec < $l | tar xf - -C ../data; rm $l; done
 for f in *.bin; do
   n=$(echo "${f%.bin}" | sed 's#_#/#')   # garrysmod_x.vpk -> garrysmod/x.vpk
   dec < "$f" > "../data/$n"; rm "$f"
