@@ -65,12 +65,29 @@ static void wait_for_content(void) {
   }
 }
 
+#include <signal.h>
+#include <sys/ucontext.h>
+void so_describe(const char *tag, void *a);
+static void on_crash(int sig, siginfo_t *si, void *uc_) {
+  ucontext_t *uc = uc_;
+  fprintf(stderr, "\n*** signal %d addr %p\n", sig, si->si_addr);
+  so_describe("pc", (void *)uc->uc_mcontext->__ss.__pc);
+  so_describe("lr", (void *)uc->uc_mcontext->__ss.__lr);
+  uint64_t *fp = (uint64_t *)uc->uc_mcontext->__ss.__fp;
+  for (int i = 0; i < 24 && fp && ((uintptr_t)fp & 7) == 0; i++) { so_describe("bt", (void *)fp[1]); fp = (uint64_t *)fp[0]; }
+  signal(sig, SIG_DFL); raise(sig);
+}
+
 int main(int argc, char **argv) {
   snprintf(g_bundle, sizeof g_bundle, "%s", ios_bundle_path());
   snprintf(g_docs, sizeof g_docs, "%s", ios_documents_path());
   char lib[1200], wr[1200], rt[1200], lnk[1200], log[1200];
   snprintf(log, sizeof log, "%s/gmod_log.txt", g_docs);
   freopen(log, "w", stderr); setvbuf(stderr, NULL, _IONBF, 0);
+  setenv("SO_MAP", "1", 1); setenv("SO_VERBOSE", "1", 1);
+  { struct sigaction sa = {0}; sa.sa_sigaction = on_crash; sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    static char alt[65536]; stack_t ss = {alt, 0, sizeof alt}; sigaltstack(&ss, NULL);
+    sigaction(SIGSEGV, &sa, NULL); sigaction(SIGBUS, &sa, NULL); sigaction(SIGILL, &sa, NULL); }
   SDL_Init(SDL_INIT_VIDEO);  // needed for message box; engine re-inits
   wait_for_content();
 

@@ -251,3 +251,10 @@ int so_iterate_phdr(int (*cb_)(void *, size_t, void *), void *data) {
   return dl_iterate_phdr(cb, data);
 #endif
 }
+
+void so_describe(const char *tag, void *a) {
+  for (so_module *m = g_mods; m; m = m->next)
+    if ((uint8_t *)a >= (uint8_t *)m->base && (uint8_t *)a < (uint8_t *)m->base + m->size) {
+      fprintf(stderr, "%s %p = %s+0x%lx\n", tag, a, m->name, (unsigned long)((uint8_t *)a - (uint8_t *)m->base)); return; }
+  fprintf(stderr, "%s %p = ?\n", tag, a);
+}
