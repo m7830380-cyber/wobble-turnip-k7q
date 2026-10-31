@@ -1,0 +1,17 @@
+"GameInfo"
+{
+	game	"Garry's Mod"
+	title	""
+	type	multiplayer_only
+	nodifficulty	1
+	FileSystem
+	{
+		SteamAppId	4000
+		SearchPaths
+		{
+			game+mod+mod_write+default_write_path	|gameinfo_path|.
+			game	|gameinfo_path|runtime
+			platform	|all_source_engine_paths|platform
+		}
+	}
+}
