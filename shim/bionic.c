@@ -484,7 +484,12 @@ void *bionic_dlopen(const char *n, int f) {
   return SYSLIB_HANDLE; /* libc.so, libEGL.so, ... */
 }
 void *(*bionic_gl_proc)(const char *);
+#include "jni_fake.h"
+static void *b_SourceVR_GetJavaVM(void) { return jni_vm(); }
+static int b_JNI_GetCreatedJavaVMs(void **vms, int n, int *cnt) { if (n > 0 && vms) vms[0] = jni_vm(); if (cnt) *cnt = 1; return 0; }
 void *bionic_dlsym(void *h, const char *s) {
+  if (!strcmp(s, "SourceVR_GetJavaVM")) return (void *)b_SourceVR_GetJavaVM;
+  if (!strcmp(s, "JNI_GetCreatedJavaVMs")) return (void *)b_JNI_GetCreatedJavaVMs;
   if (h == GL_HANDLE || !strncmp(s, "gl", 2) || !strncmp(s, "egl", 3)) {
     void *p = bionic_gl_proc ? bionic_gl_proc(s) : NULL; if (p) return p;
     if (h == GL_HANDLE) return NULL;
