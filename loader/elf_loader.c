@@ -224,3 +224,19 @@ void so_init_all(void) {
   for (so_module *m = g_mods; m && n < 256; m = m->next) v[n++] = m;
   while (n--) so_init(v[n]);  /* load order */
 }
+
+#include <link.h>
+// report loaded ELF modules (bionic dl_phdr_info layout == glibc on aarch64 for first 4 fields)
+int so_iterate_phdr(int (*cb_)(void *, size_t, void *), void *data) {
+  int (*cb)(struct dl_phdr_info *, size_t, void *) = (void *)cb_;
+  for (so_module *m = g_mods; m; m = m->next) {
+    Elf64_Ehdr *eh = (Elf64_Ehdr *)m->base;
+    if (memcmp(eh->e_ident, ELFMAG, SELFMAG)) continue;
+    struct dl_phdr_info i = {0};
+    i.dlpi_addr = (Elf64_Addr)m->base; i.dlpi_name = m->name;
+    i.dlpi_phdr = (const Elf64_Phdr *)(m->base + eh->e_phoff); i.dlpi_phnum = eh->e_phnum;
+    int r = cb(&i, offsetof(struct dl_phdr_info, dlpi_adds), data);
+    if (r) return r;
+  }
+  return dl_iterate_phdr(cb, data);
+}

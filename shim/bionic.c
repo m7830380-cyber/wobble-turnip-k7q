@@ -341,7 +341,7 @@ static sym g_syms[] = {
   S("android_set_abort_message", b_set_abort_message), S("getauxval", b_getauxval),
   S("__ctype_get_mb_cur_max", b_ctype_get_mb_cur_max), S("__register_atfork", b_register_atfork),
   S("sysconf", b_sysconf), S("prctl", b_prctl), S("pthread_create", b_pthread_create),
-  S("dlopen", b_dlopen), S("dlsym", b_dlsym), S("dlclose", b_dlclose), S("dlerror", b_dlerror),
+  S("dl_iterate_phdr", so_iterate_phdr), S("dlopen", b_dlopen), S("dlsym", b_dlsym), S("dlclose", b_dlclose), S("dlerror", b_dlerror),
   S("clock_gettime", b_clock_gettime),
   {0, 0}};
 

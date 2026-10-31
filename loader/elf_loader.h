@@ -23,3 +23,4 @@ extern size_t so_tls_static_off, so_tls_static_used;
 void so_tls_init_block(uint8_t *tp);
 void so_skip(const char *name);  // never load this DT_NEEDED (symbols come from resolver: native replacement)
 int so_is_skipped(const char *n);
+int so_iterate_phdr(int (*cb)(void *, size_t, void *), void *data);
