@@ -25,10 +25,12 @@ static void *gl_proc(const char *n) {
   void *r = NULL;
   if (g_gles) r = dlsym(g_gles, n);
   if (!r && g_egl) r = dlsym(g_egl, n);
-  if (!r) r = SDL_GL_GetProcAddress(n);
   return r;
 }
+void *ios_gl_proc(const char *n) { return gl_proc(n); }
+void *glctx_resolve(const char *n);
 static void *host(const char *n) {
+  { void *g = glctx_resolve(n); if (g) return g; }
   void *p = platform_resolve(n);
   if (!p && !strncmp(n, "SDL_", 4)) p = dlsym(RTLD_DEFAULT, n);
   if (!p && (!strncmp(n, "gl", 2) || !strncmp(n, "egl", 3))) p = gl_proc(n);
