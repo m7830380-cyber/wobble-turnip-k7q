@@ -229,9 +229,6 @@ void so_init_all(void) {
 
 #ifndef __APPLE__
 #include <link.h>
-#else
-#define ELFMAG "\177ELF"
-#define SELFMAG 4
 #endif
 // report loaded ELF modules (bionic dl_phdr_info layout == glibc on aarch64 for first 4 fields)
 int so_iterate_phdr(int (*cb_)(void *, size_t, void *), void *data) {

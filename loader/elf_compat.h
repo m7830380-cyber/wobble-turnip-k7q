@@ -15,6 +15,9 @@ typedef struct { Elf64_Addr r_offset; Elf64_Xword r_info; Elf64_Sxword r_addend;
 #define ELF64_R_TYPE(i) ((i) & 0xffffffff)
 #define ELF64_ST_BIND(i) ((i) >> 4)
 #define ELF64_ST_TYPE(i) ((i) & 0xf)
+#define ELFMAG "\177ELF"
+#define SELFMAG 4
+#define EM_AARCH64 183
 #define SHN_UNDEF 0
 #define STB_LOCAL 0
 #define STB_GLOBAL 1
