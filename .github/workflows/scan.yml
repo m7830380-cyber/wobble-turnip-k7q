@@ -36,5 +36,13 @@ jobs:
             echo "x18 sample:"; head -40 out/x18.txt
           } > out/summary.txt
           cat out/summary.txt
+      - name: TLS offsets
+        run: |
+          L=apk/lib/arm64-v8a
+          for f in $L/*.so; do objdump -d --no-show-raw-insn $f | grep -A2 'tpidr_el0' | grep -oE '\[x[0-9]+(, #-?0x?[0-9a-f]+)?\]' ; done | sort | uniq -c | sort -rn | head -30 | tee out/tls_offsets.txt
+          for f in $L/*.so; do objdump -d --no-show-raw-insn $f | grep -B1 -A3 'tpidr_el0' | head -30; done > out/tls_ctx.txt
+          # functions using x18 outside setjmp-like ldp/stp
+          for f in libclient libvguimatsurface libvaudio_opus liblua_shared; do
+            objdump -d --no-show-raw-insn $L/$f.so | awk '/^[0-9a-f]+ </{fn=$2} /\<[xw]18\>/ && !/#1[45][0-9]\]/{print FILENAME" "fn}' FILENAME=$f | sort | uniq -c; done | tee out/x18_funcs.txt
       - uses: actions/upload-artifact@v4
         with: { name: scan, path: out }
