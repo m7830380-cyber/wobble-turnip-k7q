@@ -21,3 +21,5 @@ void *so_sym(so_module *m, const char *name);
 extern size_t so_tls_static_off, so_tls_static_used;
 // copy every module's TLS image into a new thread block (tp = block base)
 void so_tls_init_block(uint8_t *tp);
+void so_skip(const char *name);  // never load this DT_NEEDED (symbols come from resolver: native replacement)
+int so_is_skipped(const char *n);

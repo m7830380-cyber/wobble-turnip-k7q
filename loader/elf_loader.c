@@ -93,6 +93,9 @@ size_t so_tls_static_used = 0;      // bytes allocated so far
 __asm__(".text\n.globl so_tlsdesc_static\nso_tlsdesc_static:\n ldr x0, [x0, #8]\n ret\n");
 extern char so_tlsdesc_static[];
 static char g_libdir[512];
+static const char *g_skip[32]; static int g_nskip;
+void so_skip(const char *name) { if (g_nskip < 32) g_skip[g_nskip++] = name; }
+int so_is_skipped(const char *n) { for (int i = 0; i < g_nskip; i++) if (!strcmp(g_skip[i], n)) return 1; return 0; }
 void so_set_libdir(const char *d) { snprintf(g_libdir, sizeof g_libdir, "%s", d); }
 so_module *so_find(const char *name) {
   for (so_module *m = g_mods; m; m = m->next) if (!strcmp(m->name, name)) return m;
@@ -142,7 +145,7 @@ so_module *so_load(const char *path, int *unresolved) {
   if (m->tls_memsz) { so_tls_static_used = (so_tls_static_used + 15) & ~(size_t)15; m->tls_off = so_tls_static_off + so_tls_static_used; so_tls_static_used += m->tls_memsz; }
   for (Elf64_Dyn *d = dyn; d->d_tag; d++) if (d->d_tag == DT_NEEDED && g_libdir[0]) {
     char dp[700]; snprintf(dp, sizeof dp, "%s/%s", g_libdir, m->dynstr + d->d_un.d_val);
-    if (!so_find(m->dynstr + d->d_un.d_val) && access(dp, R_OK) == 0) {
+    if (!so_find(m->dynstr + d->d_un.d_val) && !so_is_skipped(m->dynstr + d->d_un.d_val) && access(dp, R_OK) == 0) {
       int u = 0; so_load(dp, &u);
       if (getenv("SO_VERBOSE")) fprintf(stderr, "  dep %s of %s (unres %d)\n", dp, m->name, u);
     }
