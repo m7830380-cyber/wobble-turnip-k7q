@@ -19,7 +19,7 @@ jobs:
         run: |
           mkdir -p out data/garrysmod
           export LIBDIR=$PWD/apk/lib/arm64-v8a APP_DATA_PATH=$PWD/data VALVE_GAME_PATH=$PWD/data SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy SO_MAP=1 JNI_VERBOSE=1
-          timeout 600 gdb -q -batch -ex 'set pagination off' -ex 'handle SIGSEGV stop nopass' -ex 'handle SIGBUS stop nopass' -ex 'handle SIGILL stop nopass' -ex 'handle SIGABRT stop nopass' -ex run -ex 'bt 30' -ex 'info registers' -ex 'x/12i $pc-24' -ex 'info threads' -ex 'thread apply all bt 8' --args ./m -game garrysmod > out/gdb.txt 2> out/stderr.txt || true
+          timeout 600 gdb -q -batch -ex 'set pagination off' -ex 'set libthread-db-search-path /nonexistent' -ex 'set auto-load off' -ex 'handle SIGSEGV stop nopass' -ex 'handle SIGBUS stop nopass' -ex 'handle SIGILL stop nopass' -ex 'handle SIGABRT stop nopass' -ex run -ex 'bt 30' -ex 'info registers' -ex 'x/12i $pc-24' -ex 'info threads' -ex 'thread apply all bt 8' --args ./m -game garrysmod > out/gdb.txt 2> out/stderr.txt || true
           tail -60 out/stderr.txt; cat out/gdb.txt | tail -150
           cp -r data/files/diagnostics out/ 2>/dev/null || true
       - name: Symbolize
