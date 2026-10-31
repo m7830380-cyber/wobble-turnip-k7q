@@ -303,10 +303,12 @@ void bionic_init(so_resolver next) {
 
 /* dlopen of a game lib -> our loader; system libs -> pseudo handle resolved through bionic_resolve */
 #define SYSLIB_HANDLE ((void *)1)
+#define GL_HANDLE ((void *)2)
 void *bionic_dlopen(const char *n, int f) {
   (void)f;
   if (!n) return SYSLIB_HANDLE;
   const char *b = strrchr(n, '/'); b = b ? b + 1 : n;
+  if (!strncmp(b, "libGLES", 7) || !strncmp(b, "libEGL", 6) || !strncmp(b, "libGL.", 6)) return GL_HANDLE;
   so_module *m = so_find(b);
   if (!m) {
     char p[1024]; snprintf(p, sizeof p, "%s/%s", getenv("APP_LIB_PATH") ? getenv("APP_LIB_PATH") : ".", b);
@@ -315,7 +317,12 @@ void *bionic_dlopen(const char *n, int f) {
   if (m) return m;
   return SYSLIB_HANDLE; /* libc.so, libEGL.so, ... */
 }
+void *(*bionic_gl_proc)(const char *);
 void *bionic_dlsym(void *h, const char *s) {
+  if (h == GL_HANDLE || !strncmp(s, "gl", 2) || !strncmp(s, "egl", 3)) {
+    void *p = bionic_gl_proc ? bionic_gl_proc(s) : NULL; if (p) return p;
+    if (h == GL_HANDLE) return NULL;
+  }
   if (h && h != SYSLIB_HANDLE && (uintptr_t)h > 16) { void *p = so_sym(h, s); if (p) return p; }
   return bionic_resolve(s);
 }

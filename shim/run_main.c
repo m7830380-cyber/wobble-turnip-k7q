@@ -13,7 +13,19 @@ static void *g_sdl;
 static void *host(const char *n) {
   void *p = platform_resolve(n);
   if (!p && g_sdl && !strncmp(n, "SDL_", 4)) p = dlsym(g_sdl, n);
+  if (!p && (!strncmp(n, "gl", 2) || !strncmp(n, "egl", 3))) p = gl_proc(n);
   if (!p) p = dlsym(RTLD_DEFAULT, n);
+  return p;
+}
+static void *g_gles, *g_egl;
+static void *gl_proc(const char *n) {
+  void *p = NULL;
+  if (!g_gles) g_gles = dlopen(getenv("GLES_LIB") ? getenv("GLES_LIB") : "libGLESv2.so.2", RTLD_NOW | RTLD_GLOBAL);
+  if (!g_egl) g_egl = dlopen(getenv("EGL_LIB") ? getenv("EGL_LIB") : "libEGL.so.1", RTLD_NOW | RTLD_GLOBAL);
+  if (g_gles) p = dlsym(g_gles, n);
+  if (!p && g_egl) p = dlsym(g_egl, n);
+  if (!p && g_sdl) { void *(*gp)(const char *) = dlsym(g_sdl, "SDL_GL_GetProcAddress"); if (gp) p = gp(n); }
+  if (!p && getenv("GL_VERBOSE")) fprintf(stderr, "gl missing %s\n", n);
   return p;
 }
 static long stub0(void) { return 0; }
@@ -27,6 +39,7 @@ int main(int argc, char **argv) {
   g_sdl = dlopen(getenv("SDL_LIB") ? getenv("SDL_LIB") : "libSDL2-2.0.so.0", RTLD_NOW | RTLD_GLOBAL);
   if (!g_sdl) fprintf(stderr, "warning: native SDL2 not found: %s\n", dlerror());
   platform_init();
+  bionic_gl_proc = gl_proc;
   so_set_libdir(L);
   so_skip("libSDL2.so");
   bionic_init(host);

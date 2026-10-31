@@ -8,3 +8,4 @@ const char *bionic_path(const char *p);
 int bionic_oflags(int f);
 void *bionic_dlopen(const char *n, int f);
 void *bionic_dlsym(void *h, const char *s);
+extern void *(*bionic_gl_proc)(const char *);
