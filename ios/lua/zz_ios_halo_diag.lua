@@ -38,6 +38,15 @@ timer.Create("ios_halo_diag_t", 2, 0, function()
         else log("stats ", tostring(ok), " ", tostring(a), " ", tostring(b), " ", tostring(c), " ", tostring(d)) end
     end
     local g = GetConVar("gmod_physgun_glow"); log("gmod_physgun_glow=", g and g:GetString() or "nil")
+    if render.GetGModPhysgunHaloOptimizationStats then
+        local r = {pcall(render.GetGModPhysgunHaloOptimizationStats)}
+        local t = {}
+        for i = 2, #r do
+            if istable(r[i]) then for k, v in pairs(r[i]) do t[#t+1] = tostring(k) .. "=" .. tostring(v) end
+            else t[#t+1] = tostring(r[i]) end
+        end
+        log("stats ok=", tostring(r[1]), " ", table.concat(t, " "))
+    end
     for k in pairs(stat) do stat[k] = 0 end
 end)
 local oldAdd = halo.Add
