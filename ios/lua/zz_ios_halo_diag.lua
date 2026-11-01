@@ -55,3 +55,18 @@ halo.Add = function(ents, col, bx, by, passes, add, ignz)
     if CurTime() - lastA > 2 then lastA = CurTime(); log("FALLBACK halo.Add col=", math.floor(col.r), ",", col.g, ",", col.b) end
     return oldAdd(ents, col, bx, by, passes, add, ignz)
 end
+local seen = {}
+hook.Add("Think", "ios_halo_diag_ent", function()
+    local p = LocalPlayer(); if not IsValid(p) then return end
+    local w = p:GetActiveWeapon(); if not IsValid(w) or w:GetClass() ~= "weapon_physgun" then return end
+    local tr = p:GetEyeTrace(); local e = tr.Entity
+    if not IsValid(e) or seen[e] then return end
+    seen[e] = true
+    local c = e:GetColor()
+    log("ENT ", e:GetClass(), " ", e:GetModel(), " rmode=", e:GetRenderMode(), " rfx=", e:GetRenderFX(), " alpha=", c.a,
+        " group=", tostring(e.GetRenderGroup and e:GetRenderGroup()), " mat='", e:GetMaterial(), "'")
+    for i, m in ipairs(e:GetMaterials() or {}) do
+        local mm = Material(m)
+        log("  mat ", m, " translucent=", tostring(mm:IsTranslucent()), " shader=", mm:GetShader(), " alphatest=", tostring(mm:GetInt("$alphatest")), " flags=", tostring(mm:GetInt("$flags")))
+    end
+end)
