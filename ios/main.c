@@ -93,12 +93,14 @@ static void dinfo(const char*k,int c){ if(g_sdiag<0||g_sdiag>=6000) return; if(!
  SD("%s %d fb %d vp %dx%d tex%d %u(%dx%d) blend %d st %d", k,c,fb,vp[2],vp[3],at-0x84C0,tx,tx<65536?g_tw[tx]:-1,tx<65536?g_th[tx]:-1,bl,ws); }
 static void (*r_dre)(unsigned,unsigned,unsigned,int,unsigned,const void*),(*r_debv)(unsigned,int,unsigned,const void*,int),(*r_drebv)(unsigned,unsigned,unsigned,int,unsigned,const void*,int);
 static void w_dre(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i){dinfo("dRE",c);halochk(c);r_dre(m,a,b,c,t,i);halopost(c);}
-static int g_hfix;
+static int g_hfix; static int g_hcl=-1; static float g_hcv[4];
 static int bloomchk(int c){ if(g_dumped!=2||c!=24) return 0; int tx=0,vp[4],fb=0; r_giv(0x8069,&tx); r_giv(0x0BA2,vp); if(vp[2]<1000||tx<=0||tx>=65536||g_tw[tx]>=1000) return 0; g_dumped=3; r_giv(0x8CA6,&fb); dumpfb(fb,vp[2],vp[3],"bloom_pre"); fprintf(stderr,"[halo] bloom dump tex %d %dx%d\n",tx,g_tw[tx],g_th[tx]); return 1; }
 static int halofill_pre(int c,float*sv,int*loc){ if(c!=6) return 0; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int st=0,bl=0,tx=0,pr=0; r_giv(0x0B90,&st); if(!st) return 0; r_giv(0x0BE2,&bl); r_giv(0x8069,&tx); if(!bl||tx<=0||tx>=65536||g_tw[tx]<1000) return 0; int bs=0,bd=0; r_giv(0x80C9,&bs); r_giv(0x80C8,&bd); if(bs!=1||bd!=1) return 0; r_giv(0x8B8D,&pr); if(!pr) return 0;
  static int(*gul)(unsigned,const char*); static void(*guf)(unsigned,int,float*); static void(*u1f)(int,float); if(!gul){gul=gl_proc("glGetUniformLocation");guf=gl_proc("glGetUniformfv");u1f=gl_proc("glUniform1f");}
- int l=gul(pr,"flSRGBWrite"); if(l<0) return 0; guf(pr,l,sv); if(*sv==0.0f) return 0; u1f(l,0.0f); *loc=l; if(g_hfix++<3) fprintf(stderr,"[halo] composite prog %d srgbwrite %.1f -> 0\n",pr,*sv); return 1; }
-static void halofill_post(int l,float v){ static void(*u1f)(int,float); if(!u1f) u1f=gl_proc("glUniform1f"); u1f(l,v); }
+ static float hi=-1; if(hi<0){ const char*e=getenv("GMOD_HALO_INT"); hi=e?atof(e)/100.0f:0.5f; }
+ { static void(*u4)(int,int,const float*); if(!u4) u4=gl_proc("glUniform4fv"); int lc=gul(pr,"pc[1]"); if(lc>=0){ float c4[4]; guf(pr,lc,c4); g_hcl=lc; memcpy(g_hcv,c4,16); c4[0]*=hi; c4[1]*=hi; c4[2]*=hi; u4(lc,1,c4); } }
+ int l=gul(pr,"flSRGBWrite"); if(l<0) return 1; guf(pr,l,sv); if(*sv==0.0f){ *loc=-1; return 1; } u1f(l,0.0f); *loc=l; if(g_hfix++<3) fprintf(stderr,"[halo] composite prog %d srgbwrite %.1f -> 0\n",pr,*sv); return 1; }
+static void halofill_post(int l,float v){ static void(*u1f)(int,float); static void(*u4)(int,int,const float*); if(!u1f){u1f=gl_proc("glUniform1f");u4=gl_proc("glUniform4fv");} if(l>=0) u1f(l,v); if(g_hcl>=0){ u4(g_hcl,1,g_hcv); g_hcl=-1; } }
 static void (*r_shsrc)(unsigned,int,const char*const*,const int*); static unsigned char g_blsh[65536],g_blpr[65536];
 static int g_pcl; static void blurlog(int c){ if(c!=6||g_pcl>=80) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int vp[4],tx=0,pr=0,st=0,bs=0,bd=0,bl=0,fb=0,eq=0,bsa=0,bda=0; r_giv(0x0BA2,vp); r_giv(0x8069,&tx); r_giv(0x8B8D,&pr); r_giv(0x0B90,&st); r_giv(0x0BE2,&bl); r_giv(0x80C9,&bs); r_giv(0x80C8,&bd); r_giv(0x80CB,&bsa); r_giv(0x80CA,&bda); r_giv(0x8009,&eq); r_giv(0x8CA6,&fb); if(!pr||tx<=0||tx>=65536) return; int blur=pr<65536&&g_blpr[pr]; int comp=st&&bl&&bs==1&&bd==1; if(!blur&&!comp) return;
  static int(*gul)(unsigned,const char*); static void(*guf)(unsigned,int,float*); static void(*gtp)(unsigned,unsigned,int*); if(!gul){gul=gl_proc("glGetUniformLocation");guf=gl_proc("glGetUniformfv");gtp=gl_proc("glGetTexParameteriv");}
