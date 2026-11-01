@@ -11,7 +11,7 @@ jobs:
       - name: Fetch APK, SDL2/ANGLE, SDL headers
         run: |
           brew install ldid >/dev/null
-          curl -sL -o g.apk https://github.com/tinsarfal/GDroid/releases/download/0.1.30/GDroid-0.1.30.apk
+          curl -sL -o g.apk https://github.com/m7830380-cyber/wobble-turnip-k7q/releases/download/apk31/g31.apk
           mkdir apk && (cd apk && unzip -q ../g.apk 'lib/arm64-v8a/*' 'assets/runtime.zip')
           curl -sL -o ref.ipa https://github.com/ksagameng2/source-engine/releases/download/test/source-engine.ipa
           unzip -q ref.ipa 'Payload/hl2.app/Frameworks/*' -d ref
