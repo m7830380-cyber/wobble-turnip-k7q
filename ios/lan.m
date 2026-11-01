@@ -113,7 +113,7 @@ void lan_scan(void (^done)(NSArray<NSDictionary *> *servers, NSString *err)) {
     self.servers = sv; self.navigationItem.rightBarButtonItem.enabled = YES; [self.refreshControl endRefreshing];
     NSString *me = lan_my_ip();
     self.status = err ?: (sv.count ? [NSString stringWithFormat:@"Your IP: %@", me] :
-      [NSString stringWithFormat:@"No games found. Your IP: %@\nThe host must be on the same Wi-Fi and hosting with sv_lan 1. If iOS asked about Local Network access, allow it (Settings → Privacy → Local Network).", me]);
+      [NSString stringWithFormat:@"No games found. Your IP: %@\nIf you dont see the game you either didnt type sv_lan or didnt allow ios to have local network access, allow it. or youre a dumbo", me]);
     [self.tableView reloadData];
   });
 }
