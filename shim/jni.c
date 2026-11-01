@@ -96,6 +96,21 @@ static jvalue call_a(void *env, void *obj, void *mid, const jvalue *args) {
 }
 /* va_list variants are only reachable from code compiled for the same ABI as us: we never let Android code
    hand us a va_list (AAPCS va_list struct != Darwin char*). On Linux arm64 they're the same, so support it. */
+#ifdef __APPLE__
+/* Android callers hand us a pointer to an AAPCS64 va_list struct; Darwin va_list is char*. Decode manually. */
+typedef struct { char *stack; char *gr_top; char *vr_top; int gr_offs; int vr_offs; } java_ava;
+static uint64_t jgp(java_ava *v) { if (v->gr_offs < 0) { uint64_t x = *(uint64_t *)(v->gr_top + v->gr_offs); v->gr_offs += 8; return x; } uint64_t x = *(uint64_t *)v->stack; v->stack += 8; return x; }
+static double jfp(java_ava *v) { if (v->vr_offs < 0) { double x = *(double *)(v->vr_top + v->vr_offs); v->vr_offs += 16; return x; } double x = *(double *)v->stack; v->stack += 8; return x; }
+static jvalue call_v(void *env, void *obj, void *mid, va_list ap0) {
+  java_ava *ap = *(java_ava **)&ap0;
+  jvalue a[16]; memset(a, 0, sizeof a); int n = 0; const char *p = ((jmeth *)mid)->sig + 1;
+  while (*p && *p != ')' && n < 16) { char t = *p;
+    if (t == '[' || t == 'L') { while (*p == '[') p++; if (*p == 'L') p = strchr(p, ';'); p++; a[n++].l = (void *)jgp(ap); continue; }
+    p++; if (t == 'F' || t == 'D') { double d = jfp(ap); if (t == 'F') a[n++].f = (float)d; else a[n++].d = d; }
+    else if (t == 'J') a[n++].j = (int64_t)jgp(ap); else a[n++].i = (int32_t)jgp(ap); }
+  return invoke(env, obj, mid, a);
+}
+#else
 static jvalue call_v(void *env, void *obj, void *mid, va_list ap) {
   jvalue a[16]; int n = 0; const char *p = ((jmeth *)mid)->sig + 1;
   while (*p && *p != ')' && n < 16) { char t = *p;
@@ -104,6 +119,7 @@ static jvalue call_v(void *env, void *obj, void *mid, va_list ap) {
     else if (t == 'J') a[n++].j = va_arg(ap, int64_t); else a[n++].i = va_arg(ap, int); }
   return invoke(env, obj, mid, a);
 }
+#endif
 
 #define TYPED(T, ctype, field) \
   static ctype Call##T##Method(void *e, void *o, void *m, uint64_t x3, uint64_t x4, uint64_t x5, uint64_t x6, uint64_t x7, FR) { return call_reg(e, o, m, x3, x4, x5, x6, x7, f0, f1, f2, f3, f4, f5, f6, f7).field; } \
