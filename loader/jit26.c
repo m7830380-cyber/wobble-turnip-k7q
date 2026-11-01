@@ -17,7 +17,7 @@ __attribute__((noinline, naked)) static void *JIT26PrepareRegion(void *addr, siz
 __attribute__((noinline, naked)) static void JIT26Detach(void) {
   __asm__("mov x16, #0\n brk #0xf00d\n ret");
 }
-int so_jit_traced(void);
+int so_jit_traced(void); int so_jit_mode(void);
 void so_jit_detach(void) {
   if (so_jit_mode() != 2 || !so_jit_traced() || getenv("GMOD_KEEP_DEBUGGER")) return;
   JIT26Detach();
