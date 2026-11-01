@@ -111,7 +111,7 @@ static NSMutableArray<NSString *> *g_args;
   }
   [self.stack addArrangedSubview:mp];
 
-  UIButton *ws = [self button:@"Steam Workshop — browse & download addons" action:@selector(openWorkshop)];
+  UIButton *ws = [self button:@"Steam Workshop (browser based for now)" action:@selector(openWorkshop)];
   ws.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; ws.layer.cornerRadius = 12; [ws.heightAnchor constraintEqualToConstant:46].active = YES;
   [self.stack addArrangedSubview:ws];
 
@@ -134,9 +134,9 @@ static NSMutableArray<NSString *> *g_args;
   [self slider:c text:@"Render height" key:@"height" min:480 max:1290 def:1290 step:10 fmt:@"%@: %.0fp"];
   [self slider:c text:@"UI scale" key:@"ui_scale_percent" min:50 max:200 def:100 step:5 fmt:@"%@: %.0f%%"];
   [self toggle:c text:@"Auto exposure (HDR)" key:@"autoexposure" def:YES];
-  [self toggle:c text:@"Physgun halo" key:@"physgun_halo" def:YES];
-  [self toggle:c text:@"Simplified physgun glow" key:@"fast_halo" def:NO];
-  [self toggle:c text:@"PC-accurate glow blending (sRGB fix)" key:@"srgb_fix3" def:YES];
+  [self toggle:c text:@"Physgun halo (if shit happens)" key:@"physgun_halo" def:YES];
+  [self toggle:c text:@"Simplified physgun glow (dont turn on unless issues)" key:@"fast_halo" def:NO];
+  [self toggle:c text:@"sRGB fix (leave on)" key:@"srgb_fix3" def:YES];
 
   // Controls
   c = (UIStackView *)[self card:@"CONTROLS"];
@@ -150,7 +150,7 @@ static NSMutableArray<NSString *> *g_args;
   [self toggle:c text:@"Walk through allied NPCs" key:@"gmod_npc_walkthrough" def:NO];
   [self toggle:c text:@"Walk animation" key:@"gmod_walk_anim" def:NO];
   [self toggle:c text:@"Mute failed grab sound" key:@"gmod_mute_failed_grab" def:NO];
-  [self toggle:c text:@"Developer console" key:@"console" def:YES];
+  [self toggle:c text:@"Dev console" key:@"console" def:YES];
 
   // Advanced
   c = (UIStackView *)[self card:@"LAUNCH ARGUMENTS"];
