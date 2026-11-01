@@ -353,7 +353,9 @@ int main(int argc, char **argv) {
   so_set_resolver(bionic_resolve);
   char p[1300]; snprintf(p, sizeof p, "%s/liblauncher.so", lib);
   int u = 0; so_module *m = so_load(p, &u);
-  if (!m) { fprintf(stderr, "load failed\n"); return 1; }
+  if (!m) { fprintf(stderr, "load failed\n");
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "GMod", "Loading the game libraries failed (JIT memory). Send Documents/gmod_log.txt.", NULL);
+    return 1; }
   fprintf(stderr, "loaded, unresolved=%d\n", u);
   bionic_thread_enter();
   { /* liblua's own internal PLT calls bypass the resolver: patch its GOT slots (APK 0.1.30 offsets) */

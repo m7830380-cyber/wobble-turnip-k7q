@@ -4,6 +4,7 @@
 #include "elf_loader.h"
 #include "elf_compat.h"
 #include <stddef.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +14,7 @@
 #include <unistd.h>
 #ifdef __APPLE__
 #include <libkern/OSCacheControl.h>
+#include <mach/mach.h>
 #endif
 
 #define RA_ABS64 257
@@ -39,18 +41,43 @@ int so_is_mirrored(void *p) { return so_wptr(p) != p; }
 extern void *so_jit_prepare(void *addr, size_t len, uint8_t **rw);
 #endif
 /* TXM: whole image comes from the debugger as RX (+RW mirror); data pages are then replaced by plain RW */
+static void add_mirror(uint8_t *rx, size_t len, uint8_t *rw);
+static int g_txm_b; /* 1 = anon RX mmap refused: use debugger-allocated image */
 static uint8_t *g_img_rw;
+static int data_page(uint8_t *a, size_t len) {
+#ifdef __APPLE__
+  vm_address_t v = (vm_address_t)a;
+  kern_return_t k1 = vm_deallocate(mach_task_self(), v, len);
+  kern_return_t k2 = vm_allocate(mach_task_self(), &v, len, VM_FLAGS_FIXED);
+  if (k2 == KERN_SUCCESS && v == (vm_address_t)a) return 0;
+  if (mmap(a, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED) return 0;
+  fprintf(stderr, "[jit] data remap %p: dealloc %d alloc %d errno %d\n", (void *)a, k1, k2, errno);
+#endif
+  (void)a; (void)len; return -1;
+}
 static uint8_t *alloc_image(size_t len, int *txm) {
   *txm = 0; g_img_rw = NULL;
 #ifdef __APPLE__
   if (so_jit_mode() == 2) {
     if (!so_jit_traced()) { fprintf(stderr, "[jit] TXM device but no debugger attached\n"); return MAP_FAILED; }
-    uint8_t *rw = NULL, *rx = so_jit_prepare(NULL, len, &rw);
-    if (!rx) return MAP_FAILED;
-    *txm = 1; g_img_rw = rw; return rx;
+    *txm = 1;
+    if (g_txm_b) { uint8_t *rw = NULL, *rx = so_jit_prepare(NULL, len, &rw); if (!rx) return MAP_FAILED; g_img_rw = rw; return rx; }
   }
 #endif
   return mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+}
+/* replace [a,a+len) with an RX mapping the debugger has made executable; RW mirror for writes */
+static int make_exec(const char *nm, uint8_t *a, size_t len) {
+#ifdef __APPLE__
+  if (mmap(a, len, PROT_READ | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED) {
+    fprintf(stderr, "[%s] RX mmap %p+%zx errno %d\n", nm, (void *)a, len, errno); return -1; }
+  uint8_t *rw = NULL;
+  if (!so_jit_prepare(a, len, &rw)) return -1;
+  add_mirror(a, len, rw);
+  return 0;
+#else
+  (void)nm; (void)a; (void)len; return -1;
+#endif
 }
 static void add_mirror(uint8_t *rx, size_t len, uint8_t *rw) {
   if (g_nmir < 256) { g_mir[g_nmir].rx = rx; g_mir[g_nmir].rw = rw; g_mir[g_nmir].len = len; g_nmir++; }
@@ -170,20 +197,30 @@ so_module *so_load(const char *path, int *unresolved) {
   m->base = base; m->size = sz;
   const char *bn = strrchr(path, '/');
   snprintf(m->name, sizeof m->name, "%s", bn ? bn + 1 : path);
-  if (txm) {
-    uint8_t *mir = g_img_rw;
-    for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD) {
+  if (txm && !g_txm_b) {
+    /* probe: can we make an anonymous RX mapping in place? */
+    uint64_t a0 = 0, e0 = 0;
+    for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) { a0 = PDOWN(ph[i].p_vaddr); e0 = PUP(ph[i].p_vaddr + ph[i].p_memsz); break; }
+    if (e0 && mmap(base + a0, e0 - a0, PROT_READ | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED) {
+      fprintf(stderr, "[jit] anon RX mmap refused (errno %d) -> debugger-allocated images\n", errno);
+      munmap(base, sz + tsz); g_txm_b = 1;
+      base = alloc_image(sz + tsz, &txm); if (base == MAP_FAILED) return NULL;
+      m->base = base;
+    }
+  }
+  if (txm && g_txm_b) {
+    for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) {
+      uint64_t a = PDOWN(ph[i].p_vaddr), e = PUP(ph[i].p_vaddr + ph[i].p_memsz); add_mirror(base + a, e - a, g_img_rw + a); }
+    if (tsz) add_mirror(base + sz, tsz, g_img_rw + sz);
+    for (size_t off = 0; off < sz; off += PG) if (!so_is_mirrored(base + off) && data_page(base + off, PG)) return NULL;
+    fprintf(stderr, "[%s] TXM(B) image %p\n", m->name, base);
+  } else if (txm) {
+    for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) {
       uint64_t a = PDOWN(ph[i].p_vaddr), e = PUP(ph[i].p_vaddr + ph[i].p_memsz);
-      if (ph[i].p_flags & PF_X) add_mirror(base + a, e - a, mir + a);
+      if (make_exec(m->name, base + a, e - a)) return NULL;
     }
-    if (tsz) add_mirror(base + sz, tsz, mir + sz);
-    /* every page not covered by an exec segment becomes ordinary RW memory */
-    for (size_t off = 0; off < sz; off += PG) {
-      if (so_is_mirrored(base + off)) continue;
-      if (mmap(base + off, PG, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED)
-        { fprintf(stderr, "[%s] data page remap failed at %zx\n", m->name, off); return NULL; }
-    }
-    fprintf(stderr, "[%s] TXM image rx %p\n", m->name, base);
+    if (tsz && make_exec(m->name, base + sz, tsz)) return NULL;
+    fprintf(stderr, "[%s] TXM image %p\n", m->name, base);
   }
   Elf64_Dyn *dyn = NULL;
   for (int i = 0; i < eh->e_phnum; i++) {
