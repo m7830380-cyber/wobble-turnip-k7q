@@ -29,15 +29,8 @@ static void *gl_proc(const char *n) {
   return r;
 }
 static void stbits(void);
-static int g_dumped;
-static void dumpfb(int fb,int w,int h,const char*nm){ void(*rp)(int,int,int,int,unsigned,unsigned,void*)=gl_proc("glReadPixels"); void(*bf)(unsigned,unsigned)=gl_proc("glBindFramebuffer"); int old=0; r_giv(0x8CAA,&old);
- bf(0x8CA8,fb); unsigned char*b=malloc((size_t)w*h*4); rp(0,0,w,h,0x1908,0x1401,b); bf(0x8CA8,old);
- char pth[1024]; snprintf(pth,sizeof pth,"%s/Documents/halo_%s_%dx%d.raw",getenv("HOME"),nm,w,h); FILE*f=fopen(pth,"wb"); if(f){fwrite(b,1,(size_t)w*h*4,f);fclose(f);} free(b); fprintf(stderr,"HALODUMP %s\n",pth); }
-static void halochk(int c){ if(g_dumped||c!=24) return; int fb=0,tx=0,bl=0,vp[4]; r_giv(0x8CA6,&fb); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0BA2,vp);
- if(!bl||tx>=65536||g_tw[tx]*3>vp[2]) return; g_dumped=1; dumpfb(21,g_tw[tx],g_th[tx],"a"); dumpfb(22,g_tw[tx],g_th[tx],"b"); dumpfb(fb,vp[2],vp[3],"pre"); }
-static void halopost(int c){ if(g_dumped==1&&c==24){ g_dumped=2; int fb=0,vp[4]; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); dumpfb(fb,vp[2],vp[3],"post"); } }
 
-static void dinfo(const char*,int); static int g_sdiag = -2; static short g_tw[65536],g_th[65536];
+static void dinfo(const char*,int); static int g_sdiag = -2; static void halochk(int); static void halopost(int); static short g_tw[65536],g_th[65536];
 #define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 6000) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
 static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
 static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
@@ -80,6 +73,14 @@ static void (*r_rbs)(unsigned,unsigned,int,int), (*r_rbsm)(unsigned,int,unsigned
 static void (*r_ts2)(unsigned,int,unsigned,int,int); static void (*r_ti2)(unsigned,int,int,int,int,int,unsigned,unsigned,const void*);
 static int isdepth(unsigned f){ return f==0x81A5||f==0x81A6||f==0x81A7||f==0x1902||f==0x8CAC; }
 static int curb(unsigned q){ int v=0; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); r_giv(q,&v); return v; }
+
+static int g_dumped;
+static void dumpfb(int fb,int w,int h,const char*nm){ void(*rp)(int,int,int,int,unsigned,unsigned,void*)=gl_proc("glReadPixels"); void(*bf)(unsigned,unsigned)=gl_proc("glBindFramebuffer"); int old=0; r_giv(0x8CAA,&old);
+ bf(0x8CA8,fb); unsigned char*b=malloc((size_t)w*h*4); rp(0,0,w,h,0x1908,0x1401,b); bf(0x8CA8,old);
+ char pth[1024]; snprintf(pth,sizeof pth,"%s/Documents/halo_%s_%dx%d.raw",getenv("HOME"),nm,w,h); FILE*f=fopen(pth,"wb"); if(f){fwrite(b,1,(size_t)w*h*4,f);fclose(f);} free(b); fprintf(stderr,"HALODUMP %s\n",pth); }
+static void halochk(int c){ if(g_dumped||c!=24) return; int fb=0,tx=0,bl=0,vp[4]; r_giv(0x8CA6,&fb); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0BA2,vp);
+ if(!bl||tx>=65536||g_tw[tx]*3>vp[2]) return; g_dumped=1; dumpfb(21,g_tw[tx],g_th[tx],"a"); dumpfb(22,g_tw[tx],g_th[tx],"b"); dumpfb(fb,vp[2],vp[3],"pre"); }
+static void halopost(int c){ if(g_dumped==1&&c==24){ g_dumped=2; int fb=0,vp[4]; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); dumpfb(fb,vp[2],vp[3],"post"); } }
 
 static void dinfo(const char*k,int c){ if(g_sdiag<0||g_sdiag>=6000) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,vp[4]={0},at=0,tx=0,ws=0,bl=0,sf[4]={0}; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); r_giv(0x84E0,&at); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0BE1,sf); r_giv(0x0BE0,&sf[1]); r_giv(0x0B90,&ws);
  SD("%s %d fb %d vp %dx%d tex%d %u(%dx%d) blend %d st %d", k,c,fb,vp[2],vp[3],at-0x84C0,tx,tx<65536?g_tw[tx]:-1,tx<65536?g_th[tx]:-1,bl,ws); }
