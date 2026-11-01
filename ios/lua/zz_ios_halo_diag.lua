@@ -70,3 +70,9 @@ hook.Add("Think", "ios_halo_diag_ent", function()
         log("  mat ", m, " translucent=", tostring(mm.IsTranslucent and mm:IsTranslucent() or "?"), " shader=", tostring(mm:GetShader()), " alphatest=", tostring(mm:GetInt("$alphatest")), " flags=", tostring(mm:GetInt("$flags")))
     end
 end)
+timer.Simple(5, function()
+    for i = 0, 1 do
+        local t = render.GetScreenEffectTexture(i)
+        log("SETEX", i, " ", t:GetName(), " ", t:Width(), "x", t:Height(), " scr ", ScrW(), "x", ScrH())
+    end
+end)
