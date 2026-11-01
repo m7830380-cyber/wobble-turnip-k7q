@@ -30,7 +30,7 @@ static void *gl_proc(const char *n) {
 }
 static void stbits(void);
 static int g_sdiag = -2;
-#define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 3000) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
+#define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 6000) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
 static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
 static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
   static int n, calls; unsigned o = filt;
@@ -42,6 +42,17 @@ static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned ma
   SD("blit %dx%d->%dx%d", c-a, d-b, g-e, h-f); stbits();
   real_blit(a,b,c,d,e,f,g,h,mask,filt);
 }
+
+static void (*r_bf)(unsigned,unsigned),(*r_bfs)(unsigned,unsigned,unsigned,unsigned),(*r_be)(unsigned),(*r_bes)(unsigned,unsigned),(*r_vp)(int,int,int,int),(*r_up)(unsigned),(*r_de)(unsigned,int,unsigned,const void*),(*r_da)(unsigned,int,int),(*r_bfb)(unsigned,unsigned),(*r_ben)(unsigned);
+static void w_bf(unsigned a,unsigned b){SD("blend 0x%x 0x%x",a,b);r_bf(a,b);}
+static void w_bfs(unsigned a,unsigned b,unsigned c,unsigned d){SD("blendS 0x%x 0x%x 0x%x 0x%x",a,b,c,d);r_bfs(a,b,c,d);}
+static void w_be(unsigned a){SD("beq 0x%x",a);r_be(a);}
+static void w_bes(unsigned a,unsigned b){SD("beqS 0x%x 0x%x",a,b);r_bes(a,b);}
+static void w_vp(int a,int b,int c,int d){SD("vp %d %d %d %d",a,b,c,d);r_vp(a,b,c,d);}
+static void w_up(unsigned a){SD("prog %u",a);r_up(a);}
+static void w_de(unsigned m,int c,unsigned t,const void*i){SD("drawE %d",c);r_de(m,c,t,i);}
+static void w_da(unsigned m,int f,int c){SD("drawA %d",c);r_da(m,f,c);}
+static void w_bfb(unsigned t,unsigned f){SD("bindfb 0x%x %u",t,f);r_bfb(t,f);}
 void *ios_gl_proc(const char *n);
 static void (*r_enable)(unsigned), (*r_disable)(unsigned), (*r_sfunc)(unsigned,int,unsigned), (*r_sop)(unsigned,unsigned,unsigned), (*r_smask)(unsigned), (*r_clear)(unsigned), (*r_cmask)(unsigned char,unsigned char,unsigned char,unsigned char);
 static void (*r_sfs)(unsigned,unsigned,int,unsigned), (*r_sos)(unsigned,unsigned,unsigned,unsigned), (*r_sms)(unsigned,unsigned);
@@ -66,8 +77,8 @@ static void w_frb(unsigned t,unsigned a,unsigned rt,unsigned rb){ DSL("frb att 0
 static void w_ts2(unsigned t,int l,unsigned f,int w,int h){ if(f==0x8C43||f==0x8C41) DSL("ts2 srgb 0x%x %dx%d",f,w,h); if(f<0x8000||isdepth(f)||f==0x88F0||f==0x8CAD) DSL("ts2 fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ f=0x88F0; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1;  } if(f==0x88F0||f==0x8CAD){ int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; } r_ts2(t,l,f,w,h); }
 static void w_ti2(unsigned t,int l,int f,int w,int h,int bd,unsigned fm,unsigned ty,const void*p){ if((f==0x8C43||f==0x8C41)&&!p&&srgbfix()){ DSL("srgb rt 0x%x -> rgba8 %dx%d",f,w,h); f=(f==0x8C43)?0x8058:0x8051; } if(fm==0x1902||fm==0x84F9) DSL("ti2 if 0x%x fm 0x%x ty 0x%x %dx%d",f,fm,ty,w,h); if(fm==0x1902&&isdepth(f)){ f=0x88F0; fm=0x84F9; ty=0x84FA; p=NULL; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; DSL("teximg depth -> DS %dx%d",w,h); } if(f==0x88F0||f==0x8CAD){ int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; } r_ti2(t,l,f,w,h,bd,fm,ty,p); }
 static void w_ft2(unsigned t,unsigned a,unsigned tt,unsigned tx,int l){ if(a!=0x8CE0) DSL("ft2 att 0x%x tex %u ds%d",a,tx,tx<65536?g_dstx[tx]:-1); if(a==0x8D00&&tx<65536&&g_dstx[tx]) a=0x821A; r_ft2(t,a,tt,tx,l); }
-static void w_enable(unsigned c) { if (c == 0xB90) {  SD("enable stencil%s", ""); stbits(); } r_enable(c); }
-static void w_disable(unsigned c) { if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
+static void w_enable(unsigned c) { if (c == 0xBE2) SD("enable blend%s","");  if (c == 0xB90) {  SD("enable stencil%s", ""); stbits(); } r_enable(c); }
+static void w_disable(unsigned c) { if (c == 0xBE2) SD("disable blend%s","");  if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
 static void w_sfunc(unsigned f, int r, unsigned m) { if(g_sdiag<0&&f!=0x207) g_sdiag=0; SD("func 0x%x ref %d mask 0x%x", f, r, m); r_sfunc(f, r, m); }
 static void w_sop(unsigned a, unsigned b, unsigned c) { SD("op 0x%x 0x%x 0x%x", a, b, c); r_sop(a, b, c); }
 static void w_smask(unsigned m) { SD("wmask 0x%x", m); r_smask(m); }
@@ -83,7 +94,7 @@ static void *my_eglGetProcAddress(const char *n) { return ios_gl_proc(n); }
 void *ios_gl_proc(const char *n) {
   if (!strcmp(n, "eglGetProcAddress")) return (void*)my_eglGetProcAddress;
 #define W(nm, r, w) if (!strcmp(n, nm)) { if (!r) r = gl_proc(nm); return r ? (void*)w : NULL; }
-  W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
+  W("glBlendFunc", r_bf, w_bf) W("glBlendFuncSeparate", r_bfs, w_bfs) W("glBlendEquation", r_be, w_be) W("glBlendEquationSeparate", r_bes, w_bes) W("glViewport", r_vp, w_vp) W("glUseProgram", r_up, w_up) W("glDrawElements", r_de, w_de) W("glDrawArrays", r_da, w_da) W("glBindFramebuffer", r_bfb, w_bfb) W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
   W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask) W("glRenderbufferStorage", r_rbs, w_rbs) W("glRenderbufferStorageMultisample", r_rbsm, w_rbsm)
   W("glFramebufferRenderbuffer", r_frb, w_frb) W("glTexStorage2D", r_ts2, w_ts2) W("glTexImage2D", r_ti2, w_ti2) W("glFramebufferTexture2D", r_ft2, w_ft2) W("glStencilFuncSeparate", r_sfs, w_sfs) W("glStencilOpSeparate", r_sos, w_sos) W("glStencilMaskSeparate", r_sms, w_sms) W("glDepthMask", r_dmask, w_dmask) W("glVertexAttribPointer", r_vap, w_vap) W("glSampleCoverage", r_scov, w_scov)
   W("glUniformMatrix2fv", r_um2, w_um2) W("glUniformMatrix3fv", r_um3, w_um3) W("glUniformMatrix4fv", r_um4, w_um4)
