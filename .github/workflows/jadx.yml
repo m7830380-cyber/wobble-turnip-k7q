@@ -9,7 +9,7 @@ jobs:
           curl -sL -o j.zip https://github.com/skylot/jadx/releases/download/v1.5.1/jadx-1.5.1.zip
           unzip -q j.zip -d jadx
           jadx/bin/jadx -d out --no-res --show-bad-code g.apk || true
-          mkdir src; cp -r out/sources/com/sourcevrport src/ 2>/dev/null; cp -r out/sources/com/gmodvr src/ 2>/dev/null; cp -r out/sources/com/tinsarfal src/ 2>/dev/null; true
-          ls -R src | head -100
+          mkdir -p src; cp -r out/sources/com src/ || true
+          find src -name "*.java" | wc -l; ls src/com
       - uses: actions/upload-artifact@v4
         with: {name: java, path: src}
