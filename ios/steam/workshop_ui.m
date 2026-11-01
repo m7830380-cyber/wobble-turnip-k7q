@@ -58,7 +58,7 @@ static volatile int g_cancel;
   top.spacing = 10; top.distribution = UIStackViewDistributionFill; [h setContentHuggingPriority:1 forAxis:0];
   for (UIView *v in top.arrangedSubviews) if ([v isKindOfClass:UIButton.class]) [v.widthAnchor constraintGreaterThanOrEqualToConstant:90].active = YES;
   self.status = [UILabel new]; self.status.textColor = [UIColor colorWithWhite:0.7 alpha:1]; self.status.font = [UIFont systemFontOfSize:13]; self.status.numberOfLines = 2;
-  self.status.text = @"Addons are downloaded anonymously from Steam into garrysmod/addons (same layout as GDroid).";
+  self.status.text = @"Addons here lol.";
   self.bar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault]; self.bar.hidden = YES;
   self.table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
   self.table.backgroundColor = UIColor.clearColor; self.table.dataSource = self; self.table.delegate = self; self.table.separatorColor = [UIColor colorWithWhite:0.2 alpha:1];
@@ -81,7 +81,7 @@ static volatile int g_cancel;
 - (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
   UITableViewCell *c = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
   c.backgroundColor = UIColor.clearColor; c.textLabel.textColor = UIColor.whiteColor; c.detailTextLabel.textColor = [UIColor colorWithWhite:0.55 alpha:1];
-  if (!self.items.count) { c.textLabel.text = @"No addons installed yet"; c.detailTextLabel.text = @"Tap Browse or Add by ID / link"; c.selectionStyle = 0; return c; }
+  if (!self.items.count) { c.textLabel.text = @"No addons yet"; c.detailTextLabel.text = @""; c.selectionStyle = 0; return c; }
   NSDictionary *it = self.items[ip.row];
   c.textLabel.text = it[@"title"];
   long long sz = [it[@"size"] longLongValue];
