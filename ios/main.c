@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
   int (*jni_onload)(void *, void *) = so_sym(m, "JNI_OnLoad");
   if (jni_onload) jni_onload(jni_vm(), NULL);
   int (*lma)(int, char **) = so_sym(m, "LauncherMainAndroid");
-  char *av[] = {"gmod", "-game", "garrysmod", NULL};
+  char *av[] = {"gmod", "-game", "garrysmod", "+physgun_halo", "0", NULL};
   int r = lma(3, av);
   fprintf(stderr, "LauncherMainAndroid returned %d\n", r);
   return r;
