@@ -15,10 +15,10 @@
 @end
 @implementation TLButton
 - (instancetype)init { if ((self = [super init])) { _r = _g = _b = _a = 255; _aspect = 1; } return self; }
-- (BOOL)zone { return self.texture.length == 0; }
+- (BOOL)isZone { return self.texture.length == 0; }
 - (BOOL)hidden { return self.flags & 1; }
 - (BOOL)moreButton { return [self.command caseInsensitiveCompare:@"gmod_touch_more"] == NSOrderedSame; }
-- (BOOL)canBeInMore { return !(self.zone || self.moreButton || [self.command isEqual:@"_move"] || [self.command isEqual:@"_look"] || (self.flags & 2)); }
+- (BOOL)canBeInMore { return !(self.isZone || self.moreButton || [self.command isEqual:@"_move"] || [self.command isEqual:@"_look"] || (self.flags & 2)); }
 - (BOOL)inMore { return (self.flags & 8192) && self.canBeInMore; }
 - (float)w { return self.x2 - self.x1; }
 - (float)h { return self.y2 - self.y1; }
@@ -75,7 +75,7 @@ static NSArray<NSString *> *tltokens(NSString *s) {
       if (t.count >= 12) { b.r = MAX(0, MIN(255, [t[8] intValue])); b.g = MAX(0, MIN(255, [t[9] intValue])); b.b = MAX(0, MIN(255, [t[10] intValue])); b.a = MAX(0, MIN(255, [t[11] intValue])); }
       if (t.count >= 13) b.flags = [t[12] intValue] & ~19460;
       float asp = t.count >= 14 ? [t[13] floatValue] : 1; if (asp <= 0) asp = 1;
-      if (!b.zone) y2 = y1 + (x2 - x1) * aspect * asp;
+      if (!b.isZone) y2 = y1 + (x2 - x1) * aspect * asp;
       [L rect:b x:x1 y:y1 w:x2 - x1 h:y2 - y1];
       if ([L find:b.name]) { if (err) *err = [NSString stringWithFormat:@"Duplicate touch button %@.", b.name]; return nil; }
       [L.buttons addObject:b];
@@ -475,7 +475,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   if (b.inMore) return self.menuOpen && [self.menu containsObject:b];
   if (self.menuOpen && [self.ed.layout coveredByMore:b list:self.menu]) return NO;
   if ([self stick:b]) return YES;
-  return (!b.hidden || self.ed.showHidden) && (!b.zone || self.ed.showZones);
+  return (!b.hidden || self.ed.showHidden) && (!b.isZone || self.ed.showZones);
 }
 - (CGRect)stickBounds:(CGRect)r {
   CGRect s = self.screen; float W = s.size.width, H = s.size.height, mn = MIN(W, H);
@@ -513,15 +513,15 @@ void cb_present(UIViewController *from, void (^done)(void));
   CGContextSaveGState(c); UIRectClip(self.screen); [self arrange];
   TLEditor *ed = self.ed;
   for (int pass = 0; pass < 2; pass++) for (TLButton *b in ed.layout.buttons) {
-    if (![self showing:b] || (pass == 0) != b.zone) continue;
-    CGRect r = [self bounds:b]; UIImage *im = b.zone ? nil : [self art:b];
+    if (![self showing:b] || (pass == 0) != b.isZone) continue;
+    CGRect r = [self bounds:b]; UIImage *im = b.isZone ? nil : [self art:b];
     if (im) [im drawInRect:r blendMode:kCGBlendModeNormal alpha:b.a / 255.0 * (b.hidden ? 0.4 : 1)];
     else if ([self stickOnly:b]) [self drawStick:b rect:r];
     else {
-      [[UIColor colorWithRed:b.r / 255.0 green:b.g / 255.0 blue:b.b / 255.0 alpha:(b.zone ? 32 : 112) / 255.0] setFill]; UIRectFill(r);
+      [[UIColor colorWithRed:b.r / 255.0 green:b.g / 255.0 blue:b.b / 255.0 alpha:(b.isZone ? 32 : 112) / 255.0] setFill]; UIRectFill(r);
       if ([self stick:b]) [self drawStick:b rect:r];
       [b.color setStroke]; UIRectFrame(r);
-      UIFont *f = [UIFont boldSystemFontOfSize:b.zone ? 13 : 10]; NSString *t = b.label;
+      UIFont *f = [UIFont boldSystemFontOfSize:b.isZone ? 13 : 10]; NSString *t = b.label;
       CGSize ts = [t sizeWithAttributes:@{NSFontAttributeName: f}];
       [t drawAtPoint:CGPointMake(CGRectGetMidX(r) - ts.width / 2, CGRectGetMidY(r) - ts.height / 2) withAttributes:@{NSFontAttributeName: f, NSForegroundColorAttributeName: b.color}];
     }
@@ -545,7 +545,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   TLButton *hit = self.resizing ? ed.selected : nil;
   for (int pass = 0; pass < 2 && !hit; pass++)
     for (TLButton *b in ed.layout.buttons.reverseObjectEnumerator) {
-      if (b.zone != (pass == 1) || ![self showing:b]) continue;
+      if (b.isZone != (pass == 1) || ![self showing:b]) continue;
       CGRect r = [self stickOnly:b] ? [self stickBounds:[self bounds:b]] : [self bounds:b];
       if (CGRectContainsPoint(r, p)) { hit = b; break; } }
   if (!hit) { self.down = CGPointMake(-1, -1); return; }
@@ -559,7 +559,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   if (!self.moved) return;
   float x = (p.x - self.screen.origin.x) / self.screen.size.width, y = (p.y - self.screen.origin.y) / self.screen.size.height; self.finger = CGPointMake(x, y);
   TLButton *s = ed.selected;
-  if (self.resizing) [ed.layout rect:s x:s.x1 y:s.y1 w:x - s.x1 h:s.zone ? y - s.y1 : (x - s.x1) * ed.layout.screenAspect * s.aspect];
+  if (self.resizing) [ed.layout rect:s x:s.x1 y:s.y1 w:x - s.x1 h:s.isZone ? y - s.y1 : (x - s.x1) * ed.layout.screenAspect * s.aspect];
   else [ed.layout rect:s x:x - self.drag.x y:y - self.drag.y w:s.w h:s.h];
   [ed edited];
 }
@@ -618,7 +618,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   TLButton *s = [self.layout find:@"speed"]; if (!s || [s.command caseInsensitiveCompare:@"+speed"] || s.hidden || s.inMore) return;
   if (!(fabsf(s.x1 - 0.72f) < 0.002f && fabsf(s.y1 - 0.589f) < 0.002f && fabsf(s.x2 - 0.8f) < 0.002f)) return;
   float f = 0.1f, f2 = 0.755556f, f3 = 0.18f, hh = (s.h * (f3 - f)) / s.w + f2;
-  for (TLButton *b in self.layout.buttons) if (b != s && !b.zone && !b.hidden && !b.inMore && b.x1 < f3 - 0.001f && b.x2 > f + 0.001f && b.y1 < hh - 0.001f && b.y2 > f2 + 0.001f) return;
+  for (TLButton *b in self.layout.buttons) if (b != s && !b.isZone && !b.hidden && !b.inMore && b.x1 < f3 - 0.001f && b.x2 > f + 0.001f && b.y1 < hh - 0.001f && b.y2 > f2 + 0.001f) return;
   s.x1 = f; s.y1 = f2; s.x2 = f3; s.y2 = hh;
 }
 - (void)mergeCustom {
@@ -635,7 +635,7 @@ void cb_present(UIViewController *from, void (^done)(void));
 }
 - (void)reloadArt {
   NSMutableArray *texs = [NSMutableArray arrayWithObjects:@"vgui/touch/joystick_base", @"vgui/touch/joystick_knob", @"vgui/touch/sb_xg", self.layout.moreCloseTexture, nil];
-  for (TLButton *b in self.layout.buttons) if (!b.zone) [texs addObject:b.texture];
+  for (TLButton *b in self.layout.buttons) if (!b.isZone) [texs addObject:b.texture];
   for (NSString *t in texs) {
     if (self.icons[t]) continue;
     UIImage *im = self.uploaded[t] ? image_from_rgba(self.uploaded[t]) : stock_icon(t); if (im) self.icons[t] = im; }
@@ -669,7 +669,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   NSString *err = nil;
   if (![self load:&err]) { UILabel *l = [self lab:[@"Could not open the layout: " stringByAppendingString:err ?: @"?"] size:14]; [self.insp addArrangedSubview:l]; return; }
   [self buildInspector];
-  TLButton *first = nil; for (TLButton *b in self.layout.buttons) if (!b.zone && !b.hidden && !b.inMore) { first = b; break; }
+  TLButton *first = nil; for (TLButton *b in self.layout.buttons) if (!b.isZone && !b.hidden && !b.inMore) { first = b; break; }
   [self select:first ?: self.layout.buttons[0]];
 }
 - (void)buildInspector {
@@ -719,10 +719,10 @@ void cb_present(UIViewController *from, void (^done)(void));
     self.sliderLabels[i].text = [NSString stringWithFormat:@"%@: %.1f%%", n[i], v[i] * 100]; }
   self.visSw.on = !b.hidden; self.moreSw.on = b.inMore; self.moreSw.enabled = b.canBeInMore;
   self.colorBtn.tintColor = ([b.command isEqual:@"_move"] && !(b.flags & 4096)) ? [UIColor colorWithRed:0xaa / 255.0 green:0 blue:0 alpha:1] : b.color;
-  self.imgBtn.enabled = !b.zone; [self.imgBtn setTitle:b.moreButton ? @"Choose ⋯ icon image…" : @"Choose icon image…" forState:0];
+  self.imgBtn.enabled = !b.isZone; [self.imgBtn setTitle:b.moreButton ? @"Choose ⋯ icon image…" : @"Choose icon image…" forState:0];
   [self.restoreBtn setTitle:b.moreButton ? @"Restore preset ⋯ icon" : @"Restore preset icon" forState:0];
   TLButton *stock = [[TLLayout parse:self.defaults aspect:self.layout.screenAspect error:nil] find:b.name];
-  self.restoreBtn.enabled = !b.zone && (ce ? ce.imageEncoded != nil : (stock && ![b.texture isEqual:stock.texture]));
+  self.restoreBtn.enabled = !b.isZone && (ce ? ce.imageEncoded != nil : (stock && ![b.texture isEqual:stock.texture]));
   self.closeImgBtn.hidden = self.closeRestoreBtn.hidden = !b.moreButton;
   self.closeRestoreBtn.enabled = ![self.layout.moreCloseTexture isEqual:@"vgui/touch/sb_xg"];
   self.updating = NO;
@@ -754,10 +754,10 @@ void cb_present(UIViewController *from, void (^done)(void));
 }
 - (void)colorAll {
   TLButton *s = self.selected; if (!s) return;
-  for (TLButton *b in self.layout.buttons) if (!b.zone || [b.command isEqual:@"_move"]) { b.r = s.r; b.g = s.g; b.b = s.b; b.flags |= 4096; }
+  for (TLButton *b in self.layout.buttons) if (!b.isZone || [b.command isEqual:@"_move"]) { b.r = s.r; b.g = s.g; b.b = s.b; b.flags |= 4096; }
   [self edited];
 }
-- (void)chooseImage { if (!self.selected || self.selected.zone) return; self.imageForClose = NO; [self pickPhoto]; }
+- (void)chooseImage { if (!self.selected || self.selected.isZone) return; self.imageForClose = NO; [self pickPhoto]; }
 - (void)chooseCloseImage { if (!self.selected.moreButton) return; self.imageForClose = YES; [self pickPhoto]; }
 - (void)pickPhoto {
   UIImagePickerController *p = [UIImagePickerController new]; p.sourceType = UIImagePickerControllerSourceTypePhotoLibrary; p.delegate = self;
@@ -776,7 +776,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   self.moreOpen = YES; [self reloadArt]; [self edited];
 }
 - (void)restoreCloseImage { [self setCloseImage:nil]; }
-- (void)restoreImage { if (self.selected && !self.selected.zone) [self setImage:nil for:self.selected]; }
+- (void)restoreImage { if (self.selected && !self.selected.isZone) [self setImage:nil for:self.selected]; }
 - (void)setImage:(NSData *)rgba for:(TLButton *)b {
   for (CBEntry *e in self.custom) if ([e.buttonName isEqual:b.name]) {
     e.imageEncoded = rgba ? encode_rgba(rgba) : nil; NSData *px = cb_rgba(e);
@@ -794,7 +794,7 @@ void cb_present(UIViewController *from, void (^done)(void));
     [self.layout.buttons removeAllObjects];
     for (TLButton *b in d.buttons) { [self.layout rect:b x:b.x1 y:b.y1 w:b.w h:b.h]; [self.layout.buttons addObject:b]; [self.layout.lines addObject:b]; }
     [self mergeCustom]; [self reloadArt]; [self rebuildPicker]; self.selected = nil;
-    TLButton *f = nil; for (TLButton *b in self.layout.buttons) if (!b.zone && !b.hidden && !b.inMore) { f = b; break; }
+    TLButton *f = nil; for (TLButton *b in self.layout.buttons) if (!b.isZone && !b.hidden && !b.inMore) { f = b; break; }
     [self select:f]; self.changed = YES; }]];
   [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; [self presentViewController:a animated:YES completion:nil];
 }
@@ -850,7 +850,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   for (NSString *n in imgs) { NSData *px = decode_rgba(imgs[n]); if (px && [icon_name(px) isEqual:n]) self.uploaded[n] = px; }
   self.layout = L; if (custom) { self.custom = custom; self.customChanged = YES; }
   [self.icons removeAllObjects]; [self mergeCustom]; [self reloadArt]; [self rebuildPicker];
-  self.selected = nil; TLButton *f = nil; for (TLButton *b in L.buttons) if (!b.zone && !b.hidden && !b.inMore) { f = b; break; }
+  self.selected = nil; TLButton *f = nil; for (TLButton *b in L.buttons) if (!b.isZone && !b.hidden && !b.inMore) { f = b; break; }
   self.snapSw.on = L.snap; [self select:f ?: L.buttons[0]]; self.changed = YES;
 }
 - (void)openCustom {
