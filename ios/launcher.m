@@ -244,7 +244,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
   [s appendFormat:@"mat_autoexposure %d\n", bv(@"autoexposure", YES)];
   [s appendFormat:@"physgun_halo %d\n", bv(@"physgun_halo", YES)];
   [s appendFormat:@"gmod_physgun_fast_halo %d\n", bv(@"fast_halo", NO)];
-  [s appendString:@"gmod_physgun_optimize_halo 1\n"];
+  [s appendString:@"gmod_physgun_optimize_halo 1\ngl_program_binary_cache 0\n"];
   [s appendFormat:@"m_pitch %s\n", bv(@"invert", NO) ? "-0.022" : "0.022"];
   if (name.length) [s appendFormat:@"name \"%@\"\n", name];
   [s appendString:@"vr_mainmenu 0\n"];

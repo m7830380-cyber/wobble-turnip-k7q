@@ -1,3 +1,4 @@
+#include <dirent.h>
 #include <libkern/OSCacheControl.h>
 #include <sys/mman.h>
 // iOS entry: content lives in Documents (user copies garrysmod/ sourceengine/ platform/ via Files).
@@ -297,6 +298,7 @@ int main(int argc, char **argv) {
       fprintf(stderr, "font %s -> %s\n", fn[i], out ? "copied" : "FAILED");
     }
   }
+  { char c[2600]; const char *bs[2]={wr,g_docs}; for(int k=0;k<2;k++){ snprintf(c,sizeof c,"%s/shadercache/glprogram",bs[k]); DIR*dd=opendir(c); struct dirent*e; int nn=0; if(dd){ while((e=readdir(dd))){ if(e->d_name[0]=='.')continue; char f[2900]; snprintf(f,sizeof f,"%s/%s",c,e->d_name); if(!unlink(f))nn++; } closedir(dd);} fprintf(stderr,"[shcache] %s cleared %d\n",c,nn);} }
   setenv("APP_LIB_PATH", lib, 1);
   setenv("APP_DATA_PATH", g_docs, 1);
   setenv("VALVE_GAME_PATH", g_docs, 1);
