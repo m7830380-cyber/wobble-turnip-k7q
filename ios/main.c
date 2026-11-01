@@ -28,6 +28,8 @@ static void *gl_proc(const char *n) {
   if (!r && g_egl) r = dlsym(g_egl, n);
   return r;
 }
+static int g_sdiag = -1; /* starts after first blit */
+#define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 120) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
 static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
 static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
   static int n, calls; unsigned o = filt;
@@ -40,8 +42,6 @@ static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned ma
   real_blit(a,b,c,d,e,f,g,h,mask,filt);
 }
 void *ios_gl_proc(const char *n);
-static int g_sdiag = -1; /* starts after first blit */
-#define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 120) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
 static void (*r_enable)(unsigned), (*r_disable)(unsigned), (*r_sfunc)(unsigned,int,unsigned), (*r_sop)(unsigned,unsigned,unsigned), (*r_smask)(unsigned), (*r_clear)(unsigned), (*r_cmask)(unsigned char,unsigned char,unsigned char,unsigned char);
 static void w_enable(unsigned c) { if (c == 0xB90) SD("enable stencil%s", ""); r_enable(c); }
 static void w_disable(unsigned c) { if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
