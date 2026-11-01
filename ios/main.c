@@ -29,8 +29,8 @@ static void *gl_proc(const char *n) {
   return r;
 }
 static void stbits(void);
-static int g_sdiag = -1; /* starts after first blit */
-#define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 500) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
+static int g_sdiag = -2;
+#define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 3000) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
 static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
 static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
   static int n, calls; unsigned o = filt;
@@ -38,7 +38,7 @@ static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned ma
   if (filt != 0x2600 && filt != 0x2601) filt = (filt == 2) ? 0x2601 : 0x2600; /* D3DTEXF: 1=POINT 2=LINEAR */
   if (mask & 0x500) filt = 0x2600;
   if (o != filt && n++ < 10) fprintf(stderr, "BLITFIX filter 0x%x -> 0x%x mask 0x%x %dx%d->%dx%d\n", o, filt, mask, c-a, d-b, g-e, h-f);
-  if (g_sdiag < 0) g_sdiag = 0;
+  
   SD("blit %dx%d->%dx%d", c-a, d-b, g-e, h-f); stbits();
   real_blit(a,b,c,d,e,f,g,h,mask,filt);
 }
@@ -46,7 +46,7 @@ void *ios_gl_proc(const char *n);
 static void (*r_enable)(unsigned), (*r_disable)(unsigned), (*r_sfunc)(unsigned,int,unsigned), (*r_sop)(unsigned,unsigned,unsigned), (*r_smask)(unsigned), (*r_clear)(unsigned), (*r_cmask)(unsigned char,unsigned char,unsigned char,unsigned char);
 static void (*r_sfs)(unsigned,unsigned,int,unsigned), (*r_sos)(unsigned,unsigned,unsigned,unsigned), (*r_sms)(unsigned,unsigned);
 static void (*r_giv)(unsigned,int*);
-static void w_sfs(unsigned f,unsigned fn,int r,unsigned m){ SD("funcS 0x%x 0x%x ref %d mask 0x%x",f,fn,r,m); r_sfs(f,fn,r,m); }
+static void w_sfs(unsigned f,unsigned fn,int r,unsigned m){ if(g_sdiag<0&&fn!=0x207) g_sdiag=0; SD("funcS 0x%x 0x%x ref %d mask 0x%x",f,fn,r,m); r_sfs(f,fn,r,m); }
 static void w_sos(unsigned f,unsigned a,unsigned b,unsigned c){ SD("opS 0x%x 0x%x 0x%x 0x%x",f,a,b,c); r_sos(f,a,b,c); }
 static void w_sms(unsigned f,unsigned m){ SD("wmaskS 0x%x 0x%x",f,m); r_sms(f,m); }
 static void stbits(void){ if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,b=-1; r_giv(0x8CA6,&fb); r_giv(0x0D57,&b); SD("fbo %d stencilbits %d",fb,b); }
@@ -66,9 +66,9 @@ static void w_frb(unsigned t,unsigned a,unsigned rt,unsigned rb){ DSL("frb att 0
 static void w_ts2(unsigned t,int l,unsigned f,int w,int h){ if(f==0x8C43||f==0x8C41) DSL("ts2 srgb 0x%x %dx%d",f,w,h); if(f<0x8000||isdepth(f)||f==0x88F0||f==0x8CAD) DSL("ts2 fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ f=0x88F0; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1;  } if(f==0x88F0||f==0x8CAD){ int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; } r_ts2(t,l,f,w,h); }
 static void w_ti2(unsigned t,int l,int f,int w,int h,int bd,unsigned fm,unsigned ty,const void*p){ if((f==0x8C43||f==0x8C41)&&!p&&srgbfix()){ DSL("srgb rt 0x%x -> rgba8 %dx%d",f,w,h); f=(f==0x8C43)?0x8058:0x8051; } if(fm==0x1902||fm==0x84F9) DSL("ti2 if 0x%x fm 0x%x ty 0x%x %dx%d",f,fm,ty,w,h); if(fm==0x1902&&isdepth(f)){ f=0x88F0; fm=0x84F9; ty=0x84FA; p=NULL; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; DSL("teximg depth -> DS %dx%d",w,h); } if(f==0x88F0||f==0x8CAD){ int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; } r_ti2(t,l,f,w,h,bd,fm,ty,p); }
 static void w_ft2(unsigned t,unsigned a,unsigned tt,unsigned tx,int l){ if(a!=0x8CE0) DSL("ft2 att 0x%x tex %u ds%d",a,tx,tx<65536?g_dstx[tx]:-1); if(a==0x8D00&&tx<65536&&g_dstx[tx]) a=0x821A; r_ft2(t,a,tt,tx,l); }
-static void w_enable(unsigned c) { if (c == 0xB90) { if (g_sdiag < 0) g_sdiag = 0; SD("enable stencil%s", ""); stbits(); } r_enable(c); }
+static void w_enable(unsigned c) { if (c == 0xB90) {  SD("enable stencil%s", ""); stbits(); } r_enable(c); }
 static void w_disable(unsigned c) { if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
-static void w_sfunc(unsigned f, int r, unsigned m) { SD("func 0x%x ref %d mask 0x%x", f, r, m); r_sfunc(f, r, m); }
+static void w_sfunc(unsigned f, int r, unsigned m) { if(g_sdiag<0&&f!=0x207) g_sdiag=0; SD("func 0x%x ref %d mask 0x%x", f, r, m); r_sfunc(f, r, m); }
 static void w_sop(unsigned a, unsigned b, unsigned c) { SD("op 0x%x 0x%x 0x%x", a, b, c); r_sop(a, b, c); }
 static void w_smask(unsigned m) { SD("wmask 0x%x", m); r_smask(m); }
 static void w_clear(unsigned m) { SD("clear 0x%x", m); r_clear(m); }
