@@ -84,7 +84,7 @@ static void *host(const char *n) {
   { void *g = glctx_resolve(n); if (!g) g = glctx_resolve3(n); if (g) return g; }
   void *p = platform_resolve(n);
   if (!p && !strncmp(n, "SDL_", 4)) p = dlsym(RTLD_DEFAULT, n);
-  if (!p && (!strncmp(n, "gl", 2) || !strncmp(n, "egl", 3))) p = gl_proc(n);
+  if (!p && (!strncmp(n, "gl", 2) || !strncmp(n, "egl", 3))) p = ios_gl_proc(n);
   if (!p) p = dlsym(RTLD_DEFAULT, n);
   return p;
 }
