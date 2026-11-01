@@ -46,11 +46,18 @@ static int my_ShowSimpleMessageBox(unsigned flags, const char *title, const char
 static int not_debugging(void) { return 0; }
 /* LuaJIT machine code crashes on iOS (debugger freezes the faulting thread) -> interpreter only */
 static void *lua_real(const char *n) { so_module *m = so_find("liblua_shared.so"); return m ? so_sym(m, n) : NULL; }
-static void *my_luaL_newstate(void) {
+static void lua_patch_once(void) {
+  static int done; if (done) return; done = 1;
+  so_module *m = so_find("liblua_shared.so"); if (!m) { fprintf(stderr, "[lua] patch: module not found\n"); return; }
+  uint64_t *c = (uint64_t *)(m->base + 0x26cde0); uintptr_t pg = (uintptr_t)c & ~(uintptr_t)16383;
+  int r = mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE);
+  fprintf(stderr, "[lua] ctr cache was %llx (mprotect %d)\n", (unsigned long long)*c, r); *c = 0x8444c004ULL;
+}
+static void *my_luaL_newstate(void) { lua_patch_once();
   void *(*f)(void) = lua_real("luaL_newstate"); void *L = f(); 
   int (*sm)(void *, int, int) = lua_real("luaJIT_setmode"); if (L && sm) fprintf(stderr, "[lua] JIT off %p: %d\n", L, sm(L, 0, 0));
   return L; }
-static void *my_lua_newstate(void *a, void *ud) {
+static void *my_lua_newstate(void *a, void *ud) { lua_patch_once();
   void *(*f)(void *, void *) = lua_real("lua_newstate"); void *L = f(a, ud);
   int (*sm)(void *, int, int) = lua_real("luaJIT_setmode"); if (L && sm) fprintf(stderr, "[lua] JIT off %p: %d\n", L, sm(L, 0, 0));
   return L; }
