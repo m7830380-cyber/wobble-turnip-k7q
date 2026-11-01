@@ -28,7 +28,21 @@ static void *gl_proc(const char *n) {
   if (!r && g_egl) r = dlsym(g_egl, n);
   return r;
 }
-void *ios_gl_proc(const char *n) { return gl_proc(n); }
+static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
+static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
+  static int n; unsigned o = filt;
+  if (filt != 0x2600 && filt != 0x2601) filt = 0x2601;
+  if (mask & 0x500) filt = 0x2600;
+  if (o != filt && n++ < 10) fprintf(stderr, "BLITFIX filter 0x%x -> 0x%x mask 0x%x %dx%d->%dx%d\n", o, filt, mask, c-a, d-b, g-e, h-f);
+  real_blit(a,b,c,d,e,f,g,h,mask,filt);
+}
+void *ios_gl_proc(const char *n) {
+  if (!strcmp(n, "glBlitFramebuffer") || !strcmp(n, "glBlitFramebufferANGLE") || !strcmp(n, "glBlitFramebufferEXT")) {
+    if (!real_blit) real_blit = gl_proc("glBlitFramebuffer");
+    return real_blit ? (void*)fix_blit : NULL;
+  }
+  return gl_proc(n);
+}
 void *glctx_resolve(const char *n); void *glctx_resolve3(const char *n);
 static int lib_private(const char *n) {
   // libraries statically linked into the .so files (FreeType etc.). Must bind to the module's own copy,
@@ -192,7 +206,7 @@ int main(int argc, char **argv) {
 
   platform_init();
   { extern void webview_init(void); webview_init(); }
-  bionic_gl_proc = gl_proc;
+  bionic_gl_proc = ios_gl_proc;
   so_set_libdir(lib);
   so_skip("libSDL2.so");
   so_skip("libopenxr_loader.so");  // VR only; its ctor crashes on iOS
@@ -226,8 +240,8 @@ int main(int argc, char **argv) {
   int (*jni_onload)(void *, void *) = so_sym(m, "JNI_OnLoad");
   if (jni_onload) jni_onload(jni_vm(), NULL);
   int (*lma)(int, char **) = so_sym(m, "LauncherMainAndroid");
-  char *av[] = {"gmod", "-game", "garrysmod", "+physgun_halo", "0", NULL};
-  int r = lma(5, av);
+  char *av[] = {"gmod", "-game", "garrysmod", NULL};
+  int r = lma(3, av);
   fprintf(stderr, "LauncherMainAndroid returned %d\n", r);
   return r;
 }
