@@ -52,16 +52,19 @@ static void w_sms(unsigned f,unsigned m){ SD("wmaskS 0x%x 0x%x",f,m); r_sms(f,m)
 static void stbits(void){ if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,b=-1; r_giv(0x8CA6,&fb); r_giv(0x0D57,&b); SD("fbo %d stencilbits %d",fb,b); }
 /* Upgrade depth-only buffers to depth+stencil so the halo stencil pass works. */
 static unsigned char g_dsrb[65536], g_dstx[65536];
+static int g_dsl = 0;
+#define DSL(fmt, ...) do { if (g_dsl < 200) { g_dsl++; fprintf(stderr, "DSLOG " fmt "\n", __VA_ARGS__); } } while (0)
+static void (*r_fgap)(unsigned,unsigned,unsigned,int*);
 static void (*r_rbs)(unsigned,unsigned,int,int), (*r_rbsm)(unsigned,int,unsigned,int,int), (*r_frb)(unsigned,unsigned,unsigned,unsigned), (*r_ft2)(unsigned,unsigned,unsigned,unsigned,int);
 static void (*r_ts2)(unsigned,int,unsigned,int,int); static void (*r_ti2)(unsigned,int,int,int,int,int,unsigned,unsigned,const void*);
 static int isdepth(unsigned f){ return f==0x81A5||f==0x81A6||f==0x81A7||f==0x1902||f==0x8CAC; }
 static int curb(unsigned q){ int v=0; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); r_giv(q,&v); return v; }
-static void w_rbs(unsigned t,unsigned f,int w,int h){ if(isdepth(f)){ SD("rb depth 0x%x -> DS %dx%d",f,w,h); f=0x88F0; int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } else if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbs(t,f,w,h); }
-static void w_rbsm(unsigned t,int n,unsigned f,int w,int h){ if(isdepth(f)) f=0x88F0; if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbsm(t,n,f,w,h); }
-static void w_frb(unsigned t,unsigned a,unsigned rt,unsigned rb){ if(a==0x8D00&&rb<65536&&g_dsrb[rb]){ a=0x821A; SD("attach rb %u as DS",rb); } r_frb(t,a,rt,rb); }
-static void w_ts2(unsigned t,int l,unsigned f,int w,int h){ if(isdepth(f)){ f=0x88F0; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; SD("tex depth -> DS %dx%d",w,h); } r_ts2(t,l,f,w,h); }
-static void w_ti2(unsigned t,int l,int f,int w,int h,int bd,unsigned fm,unsigned ty,const void*p){ if(!p&&fm==0x1902&&isdepth(f)){ f=0x88F0; fm=0x84F9; ty=0x84FA; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; SD("teximg depth -> DS %dx%d",w,h); } r_ti2(t,l,f,w,h,bd,fm,ty,p); }
-static void w_ft2(unsigned t,unsigned a,unsigned tt,unsigned tx,int l){ if(a==0x8D00&&tx<65536&&g_dstx[tx]) a=0x821A; r_ft2(t,a,tt,tx,l); }
+static void w_rbs(unsigned t,unsigned f,int w,int h){ DSL("rbs fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ DSL("rb depth 0x%x -> DS %dx%d",f,w,h); f=0x88F0; int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } else if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbs(t,f,w,h); }
+static void w_rbsm(unsigned t,int n,unsigned f,int w,int h){ DSL("rbsm n%d fmt 0x%x %dx%d",n,f,w,h); if(isdepth(f)) f=0x88F0; if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbsm(t,n,f,w,h); }
+static void w_frb(unsigned t,unsigned a,unsigned rt,unsigned rb){ DSL("frb att 0x%x rb %u ds%d",a,rb,rb<65536?g_dsrb[rb]:-1); if(a==0x8D00&&rb<65536&&g_dsrb[rb]){ a=0x821A;  } r_frb(t,a,rt,rb); }
+static void w_ts2(unsigned t,int l,unsigned f,int w,int h){ if(f<0x8000||isdepth(f)||f==0x88F0||f==0x8CAD) DSL("ts2 fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ f=0x88F0; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1;  } r_ts2(t,l,f,w,h); }
+static void w_ti2(unsigned t,int l,int f,int w,int h,int bd,unsigned fm,unsigned ty,const void*p){ if(fm==0x1902||fm==0x84F9) DSL("ti2 if 0x%x fm 0x%x ty 0x%x %dx%d",f,fm,ty,w,h); if(!p&&fm==0x1902&&isdepth(f)){ f=0x88F0; fm=0x84F9; ty=0x84FA; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; DSL("teximg depth -> DS %dx%d",w,h); } r_ti2(t,l,f,w,h,bd,fm,ty,p); }
+static void w_ft2(unsigned t,unsigned a,unsigned tt,unsigned tx,int l){ if(a!=0x8CE0) DSL("ft2 att 0x%x tex %u ds%d",a,tx,tx<65536?g_dstx[tx]:-1); if(a==0x8D00&&tx<65536&&g_dstx[tx]) a=0x821A; r_ft2(t,a,tt,tx,l); }
 static void w_enable(unsigned c) { if (c == 0xB90) { SD("enable stencil%s", ""); stbits(); } r_enable(c); }
 static void w_disable(unsigned c) { if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
 static void w_sfunc(unsigned f, int r, unsigned m) { SD("func 0x%x ref %d mask 0x%x", f, r, m); r_sfunc(f, r, m); }
