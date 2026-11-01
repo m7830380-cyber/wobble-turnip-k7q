@@ -133,7 +133,6 @@ static NSMutableArray<NSString *> *g_args;
   [self toggle:c text:@"Physgun halo" key:@"physgun_halo" def:YES];
   [self toggle:c text:@"Simplified physgun glow" key:@"fast_halo" def:NO];
   [self toggle:c text:@"PC-accurate glow blending (sRGB fix)" key:@"srgb_fix3" def:YES];
-  [self slider:c text:@"Physgun glow brightness" key:@"halo_int" min:10 max:100 def:50 step:5 fmt:@"%@: %.0f%%"];
 
   // Controls
   c = (UIStackView *)[self card:@"CONTROLS"];
@@ -344,7 +343,6 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     else if ([action isEqual:@"load"]) [a addObjectsFromArray:@[@"+load", target]];
     else if ([action isEqual:@"connect"]) [a addObjectsFromArray:@[@"+connect", target]];
   }
-  { NSNumber *hv = [[NSUserDefaults standardUserDefaults] objectForKey:@"halo_int"]; char hb[16]; snprintf(hb, sizeof hb, "%d", hv ? hv.intValue : 50); setenv("GMOD_HALO_INT", hb, 1); }
   setenv("GMOD_SRGB_FIX", bv(@"srgb_fix3", YES) ? "1" : "0", 1);
   g_done = 1;
 }
