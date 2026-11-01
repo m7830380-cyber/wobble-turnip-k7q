@@ -122,3 +122,31 @@ void *glctx_resolve(const char *n) {
   R(SDL_GL_DeleteContext) R(SDL_GL_GetDrawableSize) R(SDL_GL_GetProcAddress) R(SDL_GL_ExtensionSupported)
   return NULL;
 }
+
+/* report native pixel resolution instead of UIKit points */
+static int px_scale(void) { return 0; }
+static void scl(int *w, int *h) { CGFloat s = UIScreen.mainScreen.nativeScale; if (w) *w = (int)(*w * s + .5); if (h) *h = (int)(*h * s + .5); }
+int gs_SDL_GetDesktopDisplayMode(int i, SDL_DisplayMode *m) { int r = SDL_GetDesktopDisplayMode(i, m); if (!r) scl(&m->w, &m->h); return r; }
+int gs_SDL_GetCurrentDisplayMode(int i, SDL_DisplayMode *m) { int r = SDL_GetCurrentDisplayMode(i, m); if (!r) scl(&m->w, &m->h); return r; }
+int gs_SDL_GetDisplayBounds(int i, SDL_Rect *b) { int r = SDL_GetDisplayBounds(i, b); if (!r) scl(&b->w, &b->h); return r; }
+void gs_SDL_GetWindowSize(SDL_Window *w, int *x, int *y) { SDL_GetWindowSize(w, x, y); scl(x, y); }
+void *glctx_resolve2(const char *n) {
+  (void)px_scale;
+  R(SDL_GetDesktopDisplayMode) R(SDL_GetCurrentDisplayMode) R(SDL_GetDisplayBounds) R(SDL_GetWindowSize)
+  return NULL;
+}
+static void fixev(SDL_Event *e) {
+  CGFloat s = UIScreen.mainScreen.nativeScale;
+  switch (e->type) {
+  case SDL_MOUSEMOTION: e->motion.x *= s; e->motion.y *= s; e->motion.xrel *= s; e->motion.yrel *= s; break;
+  case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: e->button.x *= s; e->button.y *= s; break;
+  case SDL_WINDOWEVENT: if (e->window.event == SDL_WINDOWEVENT_RESIZED || e->window.event == SDL_WINDOWEVENT_SIZE_CHANGED) { e->window.data1 *= s; e->window.data2 *= s; } break;
+  }
+}
+int gs_SDL_PollEvent(SDL_Event *e) { int r = SDL_PollEvent(e); if (r && e) fixev(e); return r; }
+Uint32 gs_SDL_GetMouseState(int *x, int *y) { Uint32 r = SDL_GetMouseState(x, y); scl(x, y); return r; }
+void gs_SDL_WarpMouseInWindow(SDL_Window *w, int x, int y) { CGFloat s = UIScreen.mainScreen.nativeScale; SDL_WarpMouseInWindow(w, x / s, y / s); }
+void *glctx_resolve3(const char *n) {
+  R(SDL_PollEvent) R(SDL_GetMouseState) R(SDL_WarpMouseInWindow)
+  return glctx_resolve2(n);
+}

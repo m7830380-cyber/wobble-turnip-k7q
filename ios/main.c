@@ -29,7 +29,7 @@ static void *gl_proc(const char *n) {
   return r;
 }
 void *ios_gl_proc(const char *n) { return gl_proc(n); }
-void *glctx_resolve(const char *n);
+void *glctx_resolve(const char *n); void *glctx_resolve3(const char *n);
 static int lib_private(const char *n) {
   // libraries statically linked into the .so files (FreeType etc.). Must bind to the module's own copy,
   // never to a same-named symbol that happens to exist in an iOS framework (different version/ABI -> hangs)
@@ -67,7 +67,7 @@ static void *host(const char *n) {
   if (!strcmp(n, "luaL_newstate") && lua_real(n)) return (void *)my_luaL_newstate;
   if (!strcmp(n, "lua_newstate") && lua_real(n)) return (void *)my_lua_newstate;
   if (lib_private(n)) return NULL;
-  { void *g = glctx_resolve(n); if (g) return g; }
+  { void *g = glctx_resolve(n); if (!g) g = glctx_resolve3(n); if (g) return g; }
   void *p = platform_resolve(n);
   if (!p && !strncmp(n, "SDL_", 4)) p = dlsym(RTLD_DEFAULT, n);
   if (!p && (!strncmp(n, "gl", 2) || !strncmp(n, "egl", 3))) p = gl_proc(n);
