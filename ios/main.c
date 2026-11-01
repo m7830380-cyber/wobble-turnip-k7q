@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
 
   snprintf(lib, sizeof lib, "%s/lib", g_bundle);
   snprintf(rt, sizeof rt, "%s/rt", g_bundle);
-  snprintf(wr, sizeof wr, "%s/../Library/GModWrite", g_docs); mkdir(wr, 0755); { char rp[1200]; if (realpath(wr, rp)) snprintf(wr, sizeof wr, "%s", rp); }
+  char ur[1200]; snprintf(ur, sizeof ur, "%s/../Library/user", g_docs); mkdir(ur, 0755); { char rp[1200]; if (realpath(ur, rp)) snprintf(ur, sizeof ur, "%s", rp); } snprintf(wr, sizeof wr, "%s/garrysmod", ur); mkdir(wr, 0755); { char rp[1200]; if (realpath(wr, rp)) snprintf(wr, sizeof wr, "%s", rp); }
   snprintf(lnk, sizeof lnk, "%s/garrysmod/runtime", g_docs);
   unlink(lnk); symlink(rt, lnk);  // bundle path changes per install
   { // Windows GMod has no linux_fonts; engine (FreeType) needs them under platform/resource/linux_fonts
@@ -182,11 +182,11 @@ int main(int argc, char **argv) {
     }
   }
   setenv("APP_LIB_PATH", lib, 1);
-  setenv("APP_DATA_PATH", g_docs, 1);
-  setenv("VALVE_GAME_PATH", g_docs, 1);
+  setenv("APP_DATA_PATH", ur, 1);
+  setenv("VALVE_GAME_PATH", ur, 1);
   setenv("SOURCEVR_SHARED_CONTENT_PATH", g_docs, 1);
   setenv("SOURCEVR_WRITE_GAME_PATH", wr, 1);
-  setenv("SOURCEVR_GAME", "garrysmod", 1);
+  setenv("SOURCEVR_GAME", "garrysmod", 1); setenv("SOURCE_GAME", "garrysmod", 1); setenv("EXTRAS_VPK_PATH", rt, 1); setenv("APP_MOD_LIB", lib, 1); setenv("LANG", "en_US.UTF-8", 1);
   bionic_set_root(g_docs);
   setenv("SO_MAP", "1", 1); setenv("SO_VERBOSE", "1", 1);
 
