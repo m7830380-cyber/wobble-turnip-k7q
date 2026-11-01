@@ -67,6 +67,6 @@ hook.Add("Think", "ios_halo_diag_ent", function()
         " group=", tostring(e.GetRenderGroup and e:GetRenderGroup()), " mat='", e:GetMaterial(), "'")
     for i, m in ipairs(e:GetMaterials() or {}) do
         local mm = Material(m)
-        log("  mat ", m, " translucent=", tostring(mm.IsTranslucent and mm:IsTranslucent()), " shader=", mm:GetShader(), " alphatest=", tostring(mm:GetInt("$alphatest")), " flags=", tostring(mm:GetInt("$flags")))
+        log("  mat ", m, " translucent=", tostring(mm.IsTranslucent and mm:IsTranslucent() or "?"), " shader=", tostring(mm:GetShader()), " alphatest=", tostring(mm:GetInt("$alphatest")), " flags=", tostring(mm:GetInt("$flags")))
     end
 end)
