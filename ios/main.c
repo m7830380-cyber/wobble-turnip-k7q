@@ -50,6 +50,18 @@ static void w_sfs(unsigned f,unsigned fn,int r,unsigned m){ SD("funcS 0x%x 0x%x 
 static void w_sos(unsigned f,unsigned a,unsigned b,unsigned c){ SD("opS 0x%x 0x%x 0x%x 0x%x",f,a,b,c); r_sos(f,a,b,c); }
 static void w_sms(unsigned f,unsigned m){ SD("wmaskS 0x%x 0x%x",f,m); r_sms(f,m); }
 static void stbits(void){ if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,b=-1; r_giv(0x8CA6,&fb); r_giv(0x0D57,&b); SD("fbo %d stencilbits %d",fb,b); }
+/* Upgrade depth-only buffers to depth+stencil so the halo stencil pass works. */
+static unsigned char g_dsrb[65536], g_dstx[65536];
+static void (*r_rbs)(unsigned,unsigned,int,int), (*r_rbsm)(unsigned,int,unsigned,int,int), (*r_frb)(unsigned,unsigned,unsigned,unsigned), (*r_ft2)(unsigned,unsigned,unsigned,unsigned,int);
+static void (*r_ts2)(unsigned,int,unsigned,int,int); static void (*r_ti2)(unsigned,int,int,int,int,int,unsigned,unsigned,const void*);
+static int isdepth(unsigned f){ return f==0x81A5||f==0x81A6||f==0x81A7||f==0x1902||f==0x8CAC; }
+static int curb(unsigned q){ int v=0; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); r_giv(q,&v); return v; }
+static void w_rbs(unsigned t,unsigned f,int w,int h){ if(isdepth(f)){ SD("rb depth 0x%x -> DS %dx%d",f,w,h); f=0x88F0; int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } else if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbs(t,f,w,h); }
+static void w_rbsm(unsigned t,int n,unsigned f,int w,int h){ if(isdepth(f)) f=0x88F0; if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbsm(t,n,f,w,h); }
+static void w_frb(unsigned t,unsigned a,unsigned rt,unsigned rb){ if(a==0x8D00&&rb<65536&&g_dsrb[rb]){ a=0x821A; SD("attach rb %u as DS",rb); } r_frb(t,a,rt,rb); }
+static void w_ts2(unsigned t,int l,unsigned f,int w,int h){ if(isdepth(f)){ f=0x88F0; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; SD("tex depth -> DS %dx%d",w,h); } r_ts2(t,l,f,w,h); }
+static void w_ti2(unsigned t,int l,int f,int w,int h,int bd,unsigned fm,unsigned ty,const void*p){ if(!p&&fm==0x1902&&isdepth(f)){ f=0x88F0; fm=0x84F9; ty=0x84FA; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; SD("teximg depth -> DS %dx%d",w,h); } r_ti2(t,l,f,w,h,bd,fm,ty,p); }
+static void w_ft2(unsigned t,unsigned a,unsigned tt,unsigned tx,int l){ if(a==0x8D00&&tx<65536&&g_dstx[tx]) a=0x821A; r_ft2(t,a,tt,tx,l); }
 static void w_enable(unsigned c) { if (c == 0xB90) { SD("enable stencil%s", ""); stbits(); } r_enable(c); }
 static void w_disable(unsigned c) { if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
 static void w_sfunc(unsigned f, int r, unsigned m) { SD("func 0x%x ref %d mask 0x%x", f, r, m); r_sfunc(f, r, m); }
@@ -68,7 +80,8 @@ void *ios_gl_proc(const char *n) {
   if (!strcmp(n, "eglGetProcAddress")) return (void*)my_eglGetProcAddress;
 #define W(nm, r, w) if (!strcmp(n, nm)) { if (!r) r = gl_proc(nm); return r ? (void*)w : NULL; }
   W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
-  W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask) W("glStencilFuncSeparate", r_sfs, w_sfs) W("glStencilOpSeparate", r_sos, w_sos) W("glStencilMaskSeparate", r_sms, w_sms) W("glDepthMask", r_dmask, w_dmask) W("glVertexAttribPointer", r_vap, w_vap) W("glSampleCoverage", r_scov, w_scov)
+  W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask) W("glRenderbufferStorage", r_rbs, w_rbs) W("glRenderbufferStorageMultisample", r_rbsm, w_rbsm)
+  W("glFramebufferRenderbuffer", r_frb, w_frb) W("glTexStorage2D", r_ts2, w_ts2) W("glTexImage2D", r_ti2, w_ti2) W("glFramebufferTexture2D", r_ft2, w_ft2) W("glStencilFuncSeparate", r_sfs, w_sfs) W("glStencilOpSeparate", r_sos, w_sos) W("glStencilMaskSeparate", r_sms, w_sms) W("glDepthMask", r_dmask, w_dmask) W("glVertexAttribPointer", r_vap, w_vap) W("glSampleCoverage", r_scov, w_scov)
   W("glUniformMatrix2fv", r_um2, w_um2) W("glUniformMatrix3fv", r_um3, w_um3) W("glUniformMatrix4fv", r_um4, w_um4)
   W("glUniformMatrix2x3fv", r_um23, w_um23) W("glUniformMatrix3x2fv", r_um32, w_um32) W("glUniformMatrix2x4fv", r_um24, w_um24)
   W("glUniformMatrix4x2fv", r_um42, w_um42) W("glUniformMatrix3x4fv", r_um34, w_um34) W("glUniformMatrix4x3fv", r_um43, w_um43)
