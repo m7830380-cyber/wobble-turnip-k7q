@@ -25,3 +25,4 @@ void so_tls_init_block(uint8_t *tp);
 void so_skip(const char *name);  // never load this DT_NEEDED (symbols come from resolver: native replacement)
 int so_is_skipped(const char *n);
 int so_iterate_phdr(int (*cb)(void *, size_t, void *), void *data);
+void so_jit_reserve_dir(const char *dir); // TXM: prepare all exec pages up front

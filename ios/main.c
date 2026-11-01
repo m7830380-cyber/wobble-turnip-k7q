@@ -313,6 +313,11 @@ int main(int argc, char **argv) {
   wait_for_content();
 
   snprintf(lib, sizeof lib, "%s/lib", g_bundle);
+  /* iOS 26 TXM: do every debugger request NOW, while StikDebug is still in the foreground-adjacent state
+     (it gets suspended while the user sits in the launcher -> a later request would hang forever), then detach */
+  so_skip("libSDL2.so"); so_skip("libopenxr_loader.so");
+  so_jit_reserve_dir(lib);
+  { extern void so_jit_detach(void); so_jit_detach(); }
   snprintf(rt, sizeof rt, "%s/rt", g_bundle);
   char ur[1200]; snprintf(ur, sizeof ur, "%s/../Library/user", g_docs); mkdir(ur, 0755); { char rp[1200]; if (realpath(ur, rp)) snprintf(ur, sizeof ur, "%s", rp); } snprintf(wr, sizeof wr, "%s/garrysmod", ur); mkdir(wr, 0755); { char rp[1200]; if (realpath(wr, rp)) snprintf(wr, sizeof wr, "%s", rp); }
   { extern void workshop_set_root(const char *); workshop_set_root(g_docs); }

@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <dirent.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -167,6 +169,65 @@ so_module *so_find(const char *name) {
   for (so_module *m = g_mods; m; m = m->next) if (!strcmp(m->name, name)) return m;
   return NULL;
 }
+/* TXM: prepare every library's executable pages up front (one debugger round-trip each, before the engine runs) */
+static struct { char name[128]; uint8_t *base; size_t sz, tsz; } g_slot[64]; static int g_nslot;
+static size_t count_tp_sites(const uint8_t *f, Elf64_Ehdr *eh) {
+  Elf64_Phdr *ph = (Elf64_Phdr *)(f + eh->e_phoff); size_t n = 0;
+  for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) {
+    const uint32_t *c = (const uint32_t *)(f + ph[i].p_offset);
+    for (size_t k = 0; k < ph[i].p_filesz / 4; k++) if ((c[k] & 0xFFFFFFE0u) == 0xD53BD040u) n++;
+  }
+  return n;
+}
+void so_jit_reserve_dir(const char *dir) {
+#ifdef __APPLE__
+  if (so_jit_mode() != 2) return;
+  DIR *d = opendir(dir); if (!d) return;
+  struct dirent *e; size_t total = 0;
+  while ((e = readdir(d)) && g_nslot < 64) {
+    size_t l = strlen(e->d_name); if (l < 4 || strcmp(e->d_name + l - 3, ".so") || so_is_skipped(e->d_name)) continue;
+    char p[900]; snprintf(p, sizeof p, "%s/%s", dir, e->d_name);
+    int fd = open(p, O_RDONLY); if (fd < 0) continue; struct stat st; fstat(fd, &st);
+    uint8_t *f = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0); close(fd); if (f == MAP_FAILED) continue;
+    Elf64_Ehdr *eh = (Elf64_Ehdr *)f; Elf64_Phdr *ph = (Elf64_Phdr *)(f + eh->e_phoff); uint64_t hi = 0;
+    for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && ph[i].p_vaddr + ph[i].p_memsz > hi) hi = ph[i].p_vaddr + ph[i].p_memsz;
+    snprintf(g_slot[g_nslot].name, 128, "%s", e->d_name);
+    g_slot[g_nslot].sz = PUP(hi); g_slot[g_nslot].tsz = PUP(count_tp_sites(f, eh) * 16);
+    total += g_slot[g_nslot].sz + g_slot[g_nslot].tsz + PG; g_nslot++;
+    munmap(f, st.st_size);
+  }
+  closedir(d);
+  uint8_t *arena = mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (arena == MAP_FAILED) { fprintf(stderr, "[jit] arena %zx failed\n", total); g_nslot = 0; return; }
+  fprintf(stderr, "[jit] arena %p %zx for %d libs\n", (void *)arena, total, g_nslot);
+  uint8_t *cur = arena;
+  for (int s = 0; s < g_nslot; s++) {
+    g_slot[s].base = cur; cur += g_slot[s].sz + g_slot[s].tsz + PG;
+    char p[900]; snprintf(p, sizeof p, "%s/%s", dir, g_slot[s].name);
+    int fd = open(p, O_RDONLY); Elf64_Ehdr eh; Elf64_Phdr ph[32];
+    if (fd < 0 || pread(fd, &eh, sizeof eh, 0) != sizeof eh || eh.e_phnum > 32 ||
+        pread(fd, ph, eh.e_phnum * sizeof *ph, eh.e_phoff) != (ssize_t)(eh.e_phnum * sizeof *ph)) { if (fd >= 0) close(fd); g_slot[s].base = NULL; continue; }
+    close(fd);
+    struct timespec t0, t1; clock_gettime(CLOCK_MONOTONIC, &t0);
+    int bad = 0;
+    for (int i = 0; i < eh.e_phnum && !bad; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) {
+      uint64_t a = PDOWN(ph[i].p_vaddr), z = PUP(ph[i].p_vaddr + ph[i].p_memsz);
+      if (make_exec(g_slot[s].name, g_slot[s].base + a, z - a)) bad = 1;
+    }
+    if (!bad && g_slot[s].tsz && make_exec(g_slot[s].name, g_slot[s].base + g_slot[s].sz, g_slot[s].tsz)) bad = 1;
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    fprintf(stderr, "[jit] prepared %s %s (%ld ms)\n", g_slot[s].name, bad ? "FAILED" : "ok",
+            (long)((t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_nsec - t0.tv_nsec) / 1000000));
+    if (bad) g_slot[s].base = NULL;
+  }
+#else
+  (void)dir;
+#endif
+}
+static int find_slot(const char *name, size_t sz, size_t tsz) {
+  for (int i = 0; i < g_nslot; i++) if (g_slot[i].base && !strcmp(g_slot[i].name, name) && g_slot[i].sz == sz && g_slot[i].tsz == tsz) return i;
+  return -1;
+}
 so_module *so_load(const char *path, int *unresolved) {
   { const char *b = strrchr(path, '/'); so_module *e = so_find(b ? b + 1 : path); if (e) { if (unresolved) *unresolved = 0; return e; } }
   int fd = open(path, O_RDONLY);
@@ -190,14 +251,16 @@ so_module *so_load(const char *path, int *unresolved) {
   }
 #endif
   size_t tsz = PUP(nsite * 16);
-  int txm = 0;
-  uint8_t *base = alloc_image(sz + tsz, &txm);
+  int txm = 0, slot;
+  { const char *b0 = strrchr(path, '/'); slot = find_slot(b0 ? b0 + 1 : path, sz, tsz); }
+  uint8_t *base = slot >= 0 ? g_slot[slot].base : alloc_image(sz + tsz, &txm);
+  if (slot >= 0) { txm = 1; fprintf(stderr, "[jit] %s uses prepared slot\n", path); }
   if (base == MAP_FAILED) return NULL;
   so_module *m = calloc(1, sizeof *m);
   m->base = base; m->size = sz;
   const char *bn = strrchr(path, '/');
   snprintf(m->name, sizeof m->name, "%s", bn ? bn + 1 : path);
-  if (txm && !g_txm_b) {
+  if (txm && slot < 0 && !g_txm_b) {
     /* probe: can we make an anonymous RX mapping in place? */
     uint64_t a0 = 0, e0 = 0;
     for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) { a0 = PDOWN(ph[i].p_vaddr); e0 = PUP(ph[i].p_vaddr + ph[i].p_memsz); break; }
@@ -214,7 +277,7 @@ so_module *so_load(const char *path, int *unresolved) {
     if (tsz) add_mirror(base + sz, tsz, g_img_rw + sz);
     for (size_t off = 0; off < sz; off += PG) if (!so_is_mirrored(base + off) && data_page(base + off, PG)) return NULL;
     fprintf(stderr, "[%s] TXM(B) image %p\n", m->name, base);
-  } else if (txm) {
+  } else if (txm && slot < 0) {
     for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) {
       uint64_t a = PDOWN(ph[i].p_vaddr), e = PUP(ph[i].p_vaddr + ph[i].p_memsz);
       if (make_exec(m->name, base + a, e - a)) return NULL;
