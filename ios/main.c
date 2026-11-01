@@ -1,3 +1,4 @@
+#include <libkern/OSCacheControl.h>
 #include <sys/mman.h>
 // iOS entry: content lives in Documents (user copies garrysmod/ sourceengine/ platform/ via Files).
 // The app bundle only carries the Android .so code (lib/) and runtime assets (rt/).
@@ -151,6 +152,12 @@ static void lua_patch_once(void) {
   uint64_t *c = (uint64_t *)(m->base + 0x26cde0); uintptr_t pg = (uintptr_t)c & ~(uintptr_t)16383;
   int r = mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE);
   fprintf(stderr, "[lua] ctr cache was %llx (mprotect %d)\n", (unsigned long long)*c, r); *c = 0x8444c004ULL;
+  so_module *cl = so_find("libclient.so");
+  if (cl) { uint32_t *ins = (uint32_t *)(cl->base + 0x968d7c); uintptr_t p2 = (uintptr_t)ins & ~(uintptr_t)16383;
+    if (*ins == 0x36000360) { int a = mprotect((void *)p2, 16384, PROT_READ | PROT_WRITE); *ins = 0x1400001b;
+      int b = mprotect((void *)p2, 16384, PROT_READ | PROT_EXEC); sys_icache_invalidate(ins, 4);
+      fprintf(stderr, "[halo] transparent-entity refusal patched (%d %d)\n", a, b); }
+    else fprintf(stderr, "[halo] patch: unexpected insn %08x\n", *ins); }
 }
 static void *my_luaL_newstate(void) { lua_patch_once();
   void *(*f)(void) = lua_real("luaL_newstate"); void *L = f(); 
