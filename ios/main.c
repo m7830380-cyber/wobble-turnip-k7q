@@ -49,13 +49,22 @@ static void w_sfunc(unsigned f, int r, unsigned m) { SD("func 0x%x ref %d mask 0
 static void w_sop(unsigned a, unsigned b, unsigned c) { SD("op 0x%x 0x%x 0x%x", a, b, c); r_sop(a, b, c); }
 static void w_smask(unsigned m) { SD("wmask 0x%x", m); r_smask(m); }
 static void w_clear(unsigned m) { SD("clear 0x%x", m); r_clear(m); }
-static void w_cmask(unsigned char a, unsigned char b, unsigned char c, unsigned char d) { SD("cmask %d%d%d%d", a, b, c, d); r_cmask(a, b, c, d); }
+static void w_cmask(unsigned a, unsigned b, unsigned c, unsigned d) { a&=0xFF; b&=0xFF; c&=0xFF; d&=0xFF; SD("cmask %d%d%d%d", a, b, c, d); r_cmask(a, b, c, d); }
+/* AAPCS64 (Android) leaves upper bits of bool/char args undefined; Darwin callees assume extended. */
+static void (*r_dmask)(unsigned char); static void w_dmask(unsigned a) { r_dmask(a & 0xFF); }
+static void (*r_vap)(unsigned,int,unsigned,unsigned char,int,const void*); static void w_vap(unsigned i,int n,unsigned t,unsigned nm,int st,const void*p){ r_vap(i,n,t,nm&0xFF,st,p); }
+static void (*r_scov)(float,unsigned char); static void w_scov(float v,unsigned x){ r_scov(v,x&0xFF); }
+#define UM(N) static void (*r_##N)(int,int,unsigned char,const float*); static void w_##N(int l,int c,unsigned t,const float*v){ r_##N(l,c,t&0xFF,v); }
+UM(um2) UM(um3) UM(um4) UM(um23) UM(um32) UM(um24) UM(um42) UM(um34) UM(um43)
 static void *my_eglGetProcAddress(const char *n) { return ios_gl_proc(n); }
 void *ios_gl_proc(const char *n) {
   if (!strcmp(n, "eglGetProcAddress")) return (void*)my_eglGetProcAddress;
 #define W(nm, r, w) if (!strcmp(n, nm)) { if (!r) r = gl_proc(nm); return r ? (void*)w : NULL; }
   W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
-  W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask)
+  W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask) W("glDepthMask", r_dmask, w_dmask) W("glVertexAttribPointer", r_vap, w_vap) W("glSampleCoverage", r_scov, w_scov)
+  W("glUniformMatrix2fv", r_um2, w_um2) W("glUniformMatrix3fv", r_um3, w_um3) W("glUniformMatrix4fv", r_um4, w_um4)
+  W("glUniformMatrix2x3fv", r_um23, w_um23) W("glUniformMatrix3x2fv", r_um32, w_um32) W("glUniformMatrix2x4fv", r_um24, w_um24)
+  W("glUniformMatrix4x2fv", r_um42, w_um42) W("glUniformMatrix3x4fv", r_um34, w_um34) W("glUniformMatrix4x3fv", r_um43, w_um43)
   if (!strcmp(n, "glBlitFramebuffer") || !strcmp(n, "glBlitFramebufferANGLE") || !strcmp(n, "glBlitFramebufferEXT")) {
     if (!real_blit) real_blit = gl_proc("glBlitFramebuffer");
     return real_blit ? (void*)fix_blit : NULL;
