@@ -51,8 +51,8 @@ static void w_be(unsigned a){SD("beq 0x%x",a);r_be(a);}
 static void w_bes(unsigned a,unsigned b){SD("beqS 0x%x 0x%x",a,b);r_bes(a,b);}
 static void w_vp(int a,int b,int c,int d){SD("vp %d %d %d %d",a,b,c,d);r_vp(a,b,c,d);}
 static void w_up(unsigned a){SD("prog %u",a);r_up(a);}
-static void w_de(unsigned m,int c,unsigned t,const void*i){dinfo("dE",c);r_de(m,c,t,i);}
-static void w_da(unsigned m,int f,int c){dinfo("dA",c);r_da(m,f,c);}
+static void w_de(unsigned m,int c,unsigned t,const void*i){dinfo("dE",c);halochk(c);r_de(m,c,t,i);halopost(c);}
+static void w_da(unsigned m,int f,int c){dinfo("dA",c);halochk(c);r_da(m,f,c);halopost(c);}
 static void w_bfb(unsigned t,unsigned f){SD("bindfb 0x%x %u",t,f);r_bfb(t,f);}
 
 
@@ -78,16 +78,21 @@ static int g_dumped;
 static void dumpfb(int fb,int w,int h,const char*nm){ void(*rp)(int,int,int,int,unsigned,unsigned,void*)=gl_proc("glReadPixels"); void(*bf)(unsigned,unsigned)=gl_proc("glBindFramebuffer"); int old=0; r_giv(0x8CAA,&old);
  bf(0x8CA8,fb); unsigned char*b=malloc((size_t)w*h*4); rp(0,0,w,h,0x1908,0x1401,b); bf(0x8CA8,old);
  char pth[1024]; snprintf(pth,sizeof pth,"%s/Documents/halo_%s_%dx%d.raw",getenv("HOME"),nm,w,h); FILE*f=fopen(pth,"wb"); if(f){fwrite(b,1,(size_t)w*h*4,f);fclose(f);} free(b); fprintf(stderr,"HALODUMP %s\n",pth); }
-static void halochk(int c){ if(g_dumped||c!=24) return; int fb=0,tx=0,bl=0,vp[4]; r_giv(0x8CA6,&fb); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0BA2,vp);
- if(!bl||tx>=65536||g_tw[tx]*3>vp[2]) return; g_dumped=1; dumpfb(21,g_tw[tx],g_th[tx],"a"); dumpfb(22,g_tw[tx],g_th[tx],"b"); dumpfb(fb,vp[2],vp[3],"pre"); }
-static void halopost(int c){ if(g_dumped==1&&c==24){ g_dumped=2; int fb=0,vp[4]; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); dumpfb(fb,vp[2],vp[3],"post"); } }
+static void dumptex(int tx,const char*nm){ void(*gf)(int,unsigned*)=gl_proc("glGenFramebuffers"); void(*df)(int,unsigned*)=gl_proc("glDeleteFramebuffers"); void(*ft)(unsigned,unsigned,unsigned,unsigned,int)=gl_proc("glFramebufferTexture2D"); void(*bf)(unsigned,unsigned)=gl_proc("glBindFramebuffer"); void(*rp)(int,int,int,int,unsigned,unsigned,void*)=gl_proc("glReadPixels");
+ int w=g_tw[tx],h=g_th[tx]; if(w<=0||h<=0){w=699;h=322;} int old=0; r_giv(0x8CAA,&old); unsigned f=0; gf(1,&f); bf(0x8CA8,f); ft(0x8CA8,0x8CE0,0xDE1,tx,0);
+ unsigned char*b=malloc((size_t)w*h*4); rp(0,0,w,h,0x1908,0x1401,b); bf(0x8CA8,old); df(1,&f);
+ char pth[1024]; snprintf(pth,sizeof pth,"%s/Documents/halo_%s_%dx%d.raw",getenv("HOME"),nm,w,h); FILE*fp=fopen(pth,"wb"); if(fp){fwrite(b,1,(size_t)w*h*4,fp);fclose(fp);} free(b); }
+static int g_hframe;
+static void halochk(int c){ if(g_dumped||c>24) return; int st=0,bl=0,tx=0,vp[4],fb=0,sf=0; r_giv(0x0B90,&st); r_giv(0x0BE2,&bl); r_giv(0x8069,&tx); r_giv(0x0BA2,vp); r_giv(0x8CA6,&fb); r_giv(0x0B92,&sf);
+ if(!st||!bl||vp[2]<1000) return; if(++g_hframe<120) return; g_dumped=1; SD("HALOCAP fb %d tex %u sfunc 0x%x",fb,tx,sf); dumptex(tx,"blur"); dumpfb(fb,vp[2],vp[3],"pre"); }
+static void halopost(int c){ if(g_dumped==1&&c<=24){ g_dumped=2; int fb=0,vp[4]; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); dumpfb(fb,vp[2],vp[3],"post"); } }
 
 static void dinfo(const char*k,int c){ if(g_sdiag<0||g_sdiag>=6000) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,vp[4]={0},at=0,tx=0,ws=0,bl=0,sf[4]={0}; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); r_giv(0x84E0,&at); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0BE1,sf); r_giv(0x0BE0,&sf[1]); r_giv(0x0B90,&ws);
  SD("%s %d fb %d vp %dx%d tex%d %u(%dx%d) blend %d st %d", k,c,fb,vp[2],vp[3],at-0x84C0,tx,tx<65536?g_tw[tx]:-1,tx<65536?g_th[tx]:-1,bl,ws); }
 static void (*r_dre)(unsigned,unsigned,unsigned,int,unsigned,const void*),(*r_debv)(unsigned,int,unsigned,const void*,int),(*r_drebv)(unsigned,unsigned,unsigned,int,unsigned,const void*,int);
-static void w_dre(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i){dinfo("dRE",c);r_dre(m,a,b,c,t,i);}
+static void w_dre(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i){dinfo("dRE",c);halochk(c);r_dre(m,a,b,c,t,i);halopost(c);}
 static void w_debv(unsigned m,int c,unsigned t,const void*i,int bv){dinfo("dEBV",c);halochk(c);r_debv(m,c,t,i,bv);halopost(c);}
-static void w_drebv(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i,int bv){dinfo("dREBV",c);r_drebv(m,a,b,c,t,i,bv);}static int g_srgbfix=-1; static int srgbfix(void){ if(g_srgbfix<0){ const char*e=getenv("GMOD_SRGB_FIX"); g_srgbfix=!(e&&*e=='0'); } return g_srgbfix; }
+static void w_drebv(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i,int bv){dinfo("dREBV",c);halochk(c);r_drebv(m,a,b,c,t,i,bv);halopost(c);}static int g_srgbfix=-1; static int srgbfix(void){ if(g_srgbfix<0){ const char*e=getenv("GMOD_SRGB_FIX"); g_srgbfix=!(e&&*e=='0'); } return g_srgbfix; }
 static void w_rbs(unsigned t,unsigned f,int w,int h){ if(f==0x8C43&&srgbfix()) f=0x8058; DSL("rbs fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ DSL("rb depth 0x%x -> DS %dx%d",f,w,h); f=0x88F0; int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } else if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbs(t,f,w,h); }
 static void w_rbsm(unsigned t,int n,unsigned f,int w,int h){ if(f==0x8C43&&srgbfix()) f=0x8058; DSL("rbsm n%d fmt 0x%x %dx%d",n,f,w,h); if(isdepth(f)) f=0x88F0; if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbsm(t,n,f,w,h); }
 static void w_frb(unsigned t,unsigned a,unsigned rt,unsigned rb){ DSL("frb att 0x%x rb %u ds%d",a,rb,rb<65536?g_dsrb[rb]:-1); if(a==0x8D00&&rb<65536&&g_dsrb[rb]){ a=0x821A;  } r_frb(t,a,rt,rb); }
