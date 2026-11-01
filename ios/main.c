@@ -29,7 +29,7 @@ static void *gl_proc(const char *n) {
   return r;
 }
 static void stbits(void);
-static int g_sdiag = -2;
+static int g_sdiag = -2; static short g_tw[65536],g_th[65536];
 #define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 6000) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
 static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
 static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
@@ -50,9 +50,16 @@ static void w_be(unsigned a){SD("beq 0x%x",a);r_be(a);}
 static void w_bes(unsigned a,unsigned b){SD("beqS 0x%x 0x%x",a,b);r_bes(a,b);}
 static void w_vp(int a,int b,int c,int d){SD("vp %d %d %d %d",a,b,c,d);r_vp(a,b,c,d);}
 static void w_up(unsigned a){SD("prog %u",a);r_up(a);}
-static void w_de(unsigned m,int c,unsigned t,const void*i){SD("drawE %d",c);r_de(m,c,t,i);}
-static void w_da(unsigned m,int f,int c){SD("drawA %d",c);r_da(m,f,c);}
+static void w_de(unsigned m,int c,unsigned t,const void*i){dinfo("dE",c);r_de(m,c,t,i);}
+static void w_da(unsigned m,int f,int c){dinfo("dA",c);r_da(m,f,c);}
 static void w_bfb(unsigned t,unsigned f){SD("bindfb 0x%x %u",t,f);r_bfb(t,f);}
+
+static void dinfo(const char*k,int c){ if(g_sdiag<0||g_sdiag>=6000) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,vp[4]={0},at=0,tx=0,ws=0,bl=0,sf[4]={0}; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); r_giv(0x84E0,&at); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0BE1,sf); r_giv(0x0BE0,&sf[1]); r_giv(0x0B90,&ws);
+ SD("%s %d fb %d vp %dx%d tex%d %u(%dx%d) blend %d st %d", k,c,fb,vp[2],vp[3],at-0x84C0,tx,tx<65536?g_tw[tx]:-1,tx<65536?g_th[tx]:-1,bl,ws); }
+static void (*r_dre)(unsigned,unsigned,unsigned,int,unsigned,const void*),(*r_debv)(unsigned,int,unsigned,const void*,int),(*r_drebv)(unsigned,unsigned,unsigned,int,unsigned,const void*,int);
+static void w_dre(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i){dinfo("dRE",c);r_dre(m,a,b,c,t,i);}
+static void w_debv(unsigned m,int c,unsigned t,const void*i,int bv){dinfo("dEBV",c);r_debv(m,c,t,i,bv);}
+static void w_drebv(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i,int bv){dinfo("dREBV",c);r_drebv(m,a,b,c,t,i,bv);}
 void *ios_gl_proc(const char *n);
 static void (*r_enable)(unsigned), (*r_disable)(unsigned), (*r_sfunc)(unsigned,int,unsigned), (*r_sop)(unsigned,unsigned,unsigned), (*r_smask)(unsigned), (*r_clear)(unsigned), (*r_cmask)(unsigned char,unsigned char,unsigned char,unsigned char);
 static void (*r_sfs)(unsigned,unsigned,int,unsigned), (*r_sos)(unsigned,unsigned,unsigned,unsigned), (*r_sms)(unsigned,unsigned);
@@ -74,8 +81,8 @@ static int g_srgbfix=-1; static int srgbfix(void){ if(g_srgbfix<0){ const char*e
 static void w_rbs(unsigned t,unsigned f,int w,int h){ if(f==0x8C43&&srgbfix()) f=0x8058; DSL("rbs fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ DSL("rb depth 0x%x -> DS %dx%d",f,w,h); f=0x88F0; int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } else if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbs(t,f,w,h); }
 static void w_rbsm(unsigned t,int n,unsigned f,int w,int h){ if(f==0x8C43&&srgbfix()) f=0x8058; DSL("rbsm n%d fmt 0x%x %dx%d",n,f,w,h); if(isdepth(f)) f=0x88F0; if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbsm(t,n,f,w,h); }
 static void w_frb(unsigned t,unsigned a,unsigned rt,unsigned rb){ DSL("frb att 0x%x rb %u ds%d",a,rb,rb<65536?g_dsrb[rb]:-1); if(a==0x8D00&&rb<65536&&g_dsrb[rb]){ a=0x821A;  } r_frb(t,a,rt,rb); }
-static void w_ts2(unsigned t,int l,unsigned f,int w,int h){ if(f==0x8C43||f==0x8C41) DSL("ts2 srgb 0x%x %dx%d",f,w,h); if(f<0x8000||isdepth(f)||f==0x88F0||f==0x8CAD) DSL("ts2 fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ f=0x88F0; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1;  } if(f==0x88F0||f==0x8CAD){ int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; } r_ts2(t,l,f,w,h); }
-static void w_ti2(unsigned t,int l,int f,int w,int h,int bd,unsigned fm,unsigned ty,const void*p){ if((f==0x8C43||f==0x8C41)&&!p&&srgbfix()){ DSL("srgb rt 0x%x -> rgba8 %dx%d",f,w,h); f=(f==0x8C43)?0x8058:0x8051; } if(fm==0x1902||fm==0x84F9) DSL("ti2 if 0x%x fm 0x%x ty 0x%x %dx%d",f,fm,ty,w,h); if(fm==0x1902&&isdepth(f)){ f=0x88F0; fm=0x84F9; ty=0x84FA; p=NULL; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; DSL("teximg depth -> DS %dx%d",w,h); } if(f==0x88F0||f==0x8CAD){ int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; } r_ti2(t,l,f,w,h,bd,fm,ty,p); }
+static void w_ts2(unsigned t,int l,unsigned f,int w,int h){ if(!l){ int b=curb(0x8069); if(b>=0&&b<65536){g_tw[b]=w;g_th[b]=h;} } if(f==0x8C43||f==0x8C41) DSL("ts2 srgb 0x%x %dx%d",f,w,h); if(f<0x8000||isdepth(f)||f==0x88F0||f==0x8CAD) DSL("ts2 fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ f=0x88F0; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1;  } if(f==0x88F0||f==0x8CAD){ int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; } r_ts2(t,l,f,w,h); }
+static void w_ti2(unsigned t,int l,int f,int w,int h,int bd,unsigned fm,unsigned ty,const void*p){ if(!l){ int b=curb(0x8069); if(b>=0&&b<65536){g_tw[b]=w;g_th[b]=h;} } if((f==0x8C43||f==0x8C41)&&!p&&srgbfix()){ DSL("srgb rt 0x%x -> rgba8 %dx%d",f,w,h); f=(f==0x8C43)?0x8058:0x8051; } if(fm==0x1902||fm==0x84F9) DSL("ti2 if 0x%x fm 0x%x ty 0x%x %dx%d",f,fm,ty,w,h); if(fm==0x1902&&isdepth(f)){ f=0x88F0; fm=0x84F9; ty=0x84FA; p=NULL; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; DSL("teximg depth -> DS %dx%d",w,h); } if(f==0x88F0||f==0x8CAD){ int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; } r_ti2(t,l,f,w,h,bd,fm,ty,p); }
 static void w_ft2(unsigned t,unsigned a,unsigned tt,unsigned tx,int l){ if(a!=0x8CE0) DSL("ft2 att 0x%x tex %u ds%d",a,tx,tx<65536?g_dstx[tx]:-1); if(a==0x8D00&&tx<65536&&g_dstx[tx]) a=0x821A; r_ft2(t,a,tt,tx,l); }
 static void w_enable(unsigned c) { if (c == 0xBE2) SD("enable blend%s","");  if (c == 0xB90) {  SD("enable stencil%s", ""); stbits(); } r_enable(c); }
 static void w_disable(unsigned c) { if (c == 0xBE2) SD("disable blend%s","");  if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
@@ -94,7 +101,7 @@ static void *my_eglGetProcAddress(const char *n) { return ios_gl_proc(n); }
 void *ios_gl_proc(const char *n) {
   if (!strcmp(n, "eglGetProcAddress")) return (void*)my_eglGetProcAddress;
 #define W(nm, r, w) if (!strcmp(n, nm)) { if (!r) r = gl_proc(nm); return r ? (void*)w : NULL; }
-  W("glBlendFunc", r_bf, w_bf) W("glBlendFuncSeparate", r_bfs, w_bfs) W("glBlendEquation", r_be, w_be) W("glBlendEquationSeparate", r_bes, w_bes) W("glViewport", r_vp, w_vp) W("glUseProgram", r_up, w_up) W("glDrawElements", r_de, w_de) W("glDrawArrays", r_da, w_da) W("glBindFramebuffer", r_bfb, w_bfb) W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
+  W("glDrawRangeElements", r_dre, w_dre) W("glDrawElementsBaseVertex", r_debv, w_debv) W("glDrawElementsBaseVertexEXT", r_debv, w_debv) W("glDrawElementsBaseVertexOES", r_debv, w_debv) W("glDrawRangeElementsBaseVertex", r_drebv, w_drebv) W("glDrawRangeElementsBaseVertexEXT", r_drebv, w_drebv) W("glDrawRangeElementsBaseVertexOES", r_drebv, w_drebv) W("glBlendFunc", r_bf, w_bf) W("glBlendFuncSeparate", r_bfs, w_bfs) W("glBlendEquation", r_be, w_be) W("glBlendEquationSeparate", r_bes, w_bes) W("glViewport", r_vp, w_vp) W("glUseProgram", r_up, w_up) W("glDrawElements", r_de, w_de) W("glDrawArrays", r_da, w_da) W("glBindFramebuffer", r_bfb, w_bfb) W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
   W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask) W("glRenderbufferStorage", r_rbs, w_rbs) W("glRenderbufferStorageMultisample", r_rbsm, w_rbsm)
   W("glFramebufferRenderbuffer", r_frb, w_frb) W("glTexStorage2D", r_ts2, w_ts2) W("glTexImage2D", r_ti2, w_ti2) W("glFramebufferTexture2D", r_ft2, w_ft2) W("glStencilFuncSeparate", r_sfs, w_sfs) W("glStencilOpSeparate", r_sos, w_sos) W("glStencilMaskSeparate", r_sms, w_sms) W("glDepthMask", r_dmask, w_dmask) W("glVertexAttribPointer", r_vap, w_vap) W("glSampleCoverage", r_scov, w_scov)
   W("glUniformMatrix2fv", r_um2, w_um2) W("glUniformMatrix3fv", r_um3, w_um3) W("glUniformMatrix4fv", r_um4, w_um4)
