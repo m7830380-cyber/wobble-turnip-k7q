@@ -406,7 +406,18 @@ typedef struct { const char *n; void *p; } sym;
 #define S(name, fn) {name, (void *)(fn)}
 #ifdef __APPLE__
 /* bionic(Linux) mmap flags -> Darwin */
+/* iOS 26 TXM: LuaJIT machine code can't be made executable (debugger is detached by then, and LuaJIT
+   needs RW+X at one address). Fail its mcode allocations -> LuaJIT aborts traces and keeps interpreting. */
+extern int so_jit_mode(void);
+static int lua_mcode_caller(void *ra) {
+  static so_module *lm; if (!lm) lm = so_find("liblua_shared.so"); if (!lm) return 0;
+  uintptr_t off = (uintptr_t)ra - (uintptr_t)lm->base;
+  return off == 0x9fbd4 || off == 0x9fc98; /* mcode_alloc_at call sites, APK 0.1.30 */
+}
 static void *b_mmap(void *a, size_t l, int pr, int fl, int fd, off_t o) {
+  if (lua_mcode_caller(__builtin_return_address(0)) && so_jit_mode() == 2) {
+    static int once; if (!once++) fprintf(stderr, "[jit] LuaJIT mcode alloc refused (TXM) -> interpreter only\n");
+    errno = ENOMEM; return MAP_FAILED; }
   int f = fl & 3;
   if (fl & 0x10) f |= MAP_FIXED;
   if (fl & 0x20) f |= MAP_ANON;
