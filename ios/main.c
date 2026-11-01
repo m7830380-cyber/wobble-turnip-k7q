@@ -310,6 +310,7 @@ int main(int argc, char **argv) {
     static char alt[65536]; stack_t ss = {alt, 0, sizeof alt}; sigaltstack(&ss, NULL);
     sigaction(SIGSEGV, &sa, NULL); sigaction(SIGBUS, &sa, NULL); sigaction(SIGILL, &sa, NULL); }
   SDL_Init(SDL_INIT_VIDEO);  // needed for message box; engine re-inits
+  { extern void ios_kbfix_install(void); ios_kbfix_install(); }
   wait_for_content();
 
   snprintf(lib, sizeof lib, "%s/lib", g_bundle);

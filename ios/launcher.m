@@ -104,7 +104,7 @@ static NSMutableArray<NSString *> *g_args;
   [play addTarget:self action:@selector(play) forControlEvents:UIControlEventTouchUpInside];
   [self.stack addArrangedSubview:play];
   UIStackView *mp = [UIStackView new]; mp.axis = UILayoutConstraintAxisHorizontal; mp.distribution = UIStackViewDistributionFillEqually; mp.spacing = 10;
-  for (NSArray *b in @[@[@"Host game", @"host"], @[@"Join by IP", @"connect"], @[@"Load a save", @"load"]]) {
+  for (NSArray *b in @[@[@"Host game", @"host"], @[@"LAN games", @"connect"], @[@"Load a save", @"load"]]) {
     UIButton *x = [self button:b[0] action:@selector(mpTap:)]; x.accessibilityIdentifier = b[1];
     x.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; x.layer.cornerRadius = 12; [x.heightAnchor constraintEqualToConstant:46].active = YES;
     [mp addArrangedSubview:x];
@@ -304,6 +304,8 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; a.popoverPresentationController.sourceView = b;
     [self presentViewController:a animated:YES completion:nil]; return;
   }
+  { extern void lan_present(UIViewController *, void (^)(NSString *));
+    lan_present(self, ^(NSString *addr) { [self launch:@"connect" target:addr]; }); return; }
   UIAlertController *t = [UIAlertController alertControllerWithTitle:@"Join by IP" message:nil preferredStyle:1];
   [t addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"192.168.1.10:27015"; f.text = [D stringForKey:@"last_ip"]; f.keyboardType = UIKeyboardTypeNumbersAndPunctuation; }];
   [t addAction:[UIAlertAction actionWithTitle:@"Connect" style:0 handler:^(UIAlertAction *x) {
