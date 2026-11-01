@@ -200,6 +200,10 @@ int main(int argc, char **argv) {
   { /* liblua's own internal PLT calls bypass the resolver: patch its GOT slots (APK 0.1.30 offsets) */
     so_module *m = so_find("liblua_shared.so");
     if (m) {
+      /* __clear_cache reads CTR_EL0 (mrs) unless cached at .bss+0x26cde0; mrs ctr_el0 traps on iOS -> pre-fill */
+      { uint64_t *c = (uint64_t *)(m->base + 0x26cde0); uintptr_t pg = (uintptr_t)c & ~(uintptr_t)16383;
+        mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE);
+        fprintf(stderr, "[lua] ctr cache was %llx\n", (unsigned long long)*c); *c = 0x8444c004ULL; }
       struct { size_t off; const char *n; void *hook; } g[] = {
         {0x253e28, "luaL_newstate", (void *)my_luaL_newstate}, {0x253b20, "lua_newstate", (void *)my_lua_newstate}};
       for (int i = 0; i < 2; i++) {
