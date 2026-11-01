@@ -12,7 +12,7 @@ jobs:
         run: |
           brew install ldid >/dev/null
           curl -sL -o g.apk https://github.com/m7830380-cyber/wobble-turnip-k7q/releases/download/apk31/g31.apk
-          mkdir apk && (cd apk && unzip -q ../g.apk 'lib/arm64-v8a/*' 'assets/runtime.zip')
+          mkdir apk && (cd apk && unzip -q ../g.apk 'lib/arm64-v8a/*' 'assets/runtime.zip' 'assets/touch_default.cfg' 'assets/touch_preview/*')
           curl -sL -o ref.ipa https://github.com/ksagameng2/source-engine/releases/download/test/source-engine.ipa
           unzip -q ref.ipa 'Payload/hl2.app/Frameworks/*' -d ref
           ls ref/Payload/hl2.app/Frameworks
@@ -31,11 +31,11 @@ jobs:
           $CC -fobjc-arc -c ios/glctx.m -o glctx.o
           $CC -fobjc-arc -c ios/webview.m -o webview.o
           $CC -fobjc-arc -c ios/launcher.m -o launcher.o
-          $CC -fobjc-arc -c ios/lan.m -o lan.o; $CC -fobjc-arc -c ios/kbfix.m -o kbfix.o
+          $CC -fobjc-arc -c ios/touchedit.m -o touchedit.o; $CC -fobjc-arc -c ios/lan.m -o lan.o; $CC -fobjc-arc -c ios/kbfix.m -o kbfix.o
           for f in sw joinws; do $CC -c ios/steam/$f.c -o st_$f.o; done
           $CC -c ios/dec/LzmaDec.c -o lzmadec.o; $CC -O2 -c ios/dec/zstddeclib.c -o zstddec.o
           $CC -fobjc-arc -c ios/steam/net_ios.m -o st_net.o; $CC -fobjc-arc -c ios/steam/workshop_ui.m -o st_ui.o
-          $CC -o gmod *.o -F$FW -framework SDL2 -framework Foundation -framework UIKit -framework Metal -framework QuartzCore -framework WebKit -framework CoreGraphics -lz -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path/Frameworks/SDL2.framework -Wl,-rpath,@executable_path/Frameworks/libEGL.framework -Wl,-rpath,@executable_path/Frameworks/libGLESv2.framework
+          $CC -o gmod *.o -F$FW -framework SDL2 -framework Foundation -framework UIKit -framework Metal -framework QuartzCore -framework WebKit -framework CoreGraphics -framework UniformTypeIdentifiers -lz -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path/Frameworks/SDL2.framework -Wl,-rpath,@executable_path/Frameworks/libEGL.framework -Wl,-rpath,@executable_path/Frameworks/libGLESv2.framework
       - name: Package
         run: |
           APP=Payload/GMod.app; mkdir -p $APP/Frameworks $APP/lib $APP/rt
@@ -44,6 +44,8 @@ jobs:
           cp -R ref/Payload/hl2.app/Frameworks/{SDL2,libEGL,libGLESv2}.framework $APP/Frameworks/
           cp apk/lib/arm64-v8a/*.so $APP/lib/; rm -f $APP/lib/libSDL2.so $APP/lib/libopenxr_loader.so
           (cd $APP/rt && unzip -q ../../../apk/assets/runtime.zip)
+          mkdir -p $APP/touch && python3 tools/vtf2png.py apk/assets/touch_preview $APP/touch && cp apk/assets/touch_default.cfg $APP/touch/
+          cp ios/bundle/touch/*.png $APP/touch/; ls $APP/touch | wc -l
           codesign --entitlements ${3:-ios/entitlements.plist} --sign - --force --deep $APP
           codesign -d --entitlements - $APP/gmod || true
           otool -L $APP/gmod; for f in $APP/Frameworks/*.framework; do otool -L $f/$(basename $f .framework) | head -5; done; otool -l $APP/gmod | grep -A3 LC_RPATH || true

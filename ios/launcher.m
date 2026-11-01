@@ -142,6 +142,11 @@ static NSMutableArray<NSString *> *g_args;
   c = (UIStackView *)[self card:@"CONTROLS"];
   [self toggle:c text:@"Touch controls" key:@"touch" def:YES];
   [self toggle:c text:@"Show joystick" key:@"touch_show_joystick" def:YES];
+  [self toggle:c text:@"Tap to toggle sprint" key:@"touch_sprint_toggle" def:NO];
+  { UIButton *cl = [self button:@"Control layout — move, resize, recolor buttons" action:@selector(openLayout)];
+    cl.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; cl.layer.cornerRadius = 10; [cl.heightAnchor constraintEqualToConstant:40].active = YES; [c addArrangedSubview:cl];
+    UIButton *cb = [self button:@"Custom buttons — keys / commands for addons" action:@selector(openCustomButtons)];
+    cb.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; cb.layer.cornerRadius = 10; [cb.heightAnchor constraintEqualToConstant:40].active = YES; [c addArrangedSubview:cb]; }
   [self slider:c text:@"Touch opacity" key:@"touch_opacity" min:0 max:100 def:60 step:5 fmt:@"%@: %.0f%%"];
   [self toggle:c text:@"Invert look" key:@"invert" def:NO];
 
@@ -243,6 +248,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
   [s appendFormat:@"fps_max %.0f\n", fv(@"fps", 60)];
   [s appendFormat:@"touch_opacity %g\n", fv(@"touch_opacity", 60) / 100.0];
   [s appendFormat:@"touch_show_joystick %d\n", bv(@"touch_show_joystick", YES)];
+  [s appendFormat:@"touch_sprint_toggle %d\n", bv(@"touch_sprint_toggle", NO)];
   [s appendFormat:@"touch_enable %d\n", bv(@"touch", YES)];
   [s appendFormat:@"vgui_ui_scale %g\n", fv(@"ui_scale_percent", 100) / 100.0];
   [s appendFormat:@"mat_autoexposure %d\n", bv(@"autoexposure", YES)];
@@ -313,6 +319,10 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     if (ip.length) { [D setObject:ip forKey:@"last_ip"]; [self launch:@"connect" target:ip]; } }]];
   [t addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; [self presentViewController:t animated:YES completion:nil];
 }
+- (void)openLayout { extern void touch_editor_present(UIViewController *, NSString *, BOOL, void (^)(BOOL));
+  [self ensureTouchDefaults]; touch_editor_present(self, [self writeRoot], NO, nil); }
+- (void)openCustomButtons { extern void cb_present(UIViewController *, void (^)(void)); cb_present(self, nil); }
+- (void)ensureTouchDefaults { [NSFileManager.defaultManager createDirectoryAtPath:[[self writeRoot] stringByAppendingPathComponent:@"cfg"] withIntermediateDirectories:YES attributes:nil error:nil]; }
 - (void)openWorkshop { extern void workshop_present(UIViewController *); workshop_present(self); }
 - (void)play {
   BOOL map = [[D stringForKey:@"gmod_start_at"] isEqualToString:@"map"];
@@ -390,6 +400,7 @@ char **ios_run_launcher(const char *docs, const char *wr, int *argc) {
     [win makeKeyAndVisible];
     while (!g_done) CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
     [vc writeCfg:[NSString stringWithUTF8String:wr]];
+    { extern void cb_install(NSString *); cb_install([NSString stringWithUTF8String:wr]); }
     win.hidden = YES; win.rootViewController = nil;
   }
   win = nil;
