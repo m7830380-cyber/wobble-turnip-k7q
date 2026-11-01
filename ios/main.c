@@ -1,3 +1,4 @@
+#include <sys/mman.h>
 // iOS entry: content lives in Documents (user copies garrysmod/ sourceengine/ platform/ via Files).
 // The app bundle only carries the Android .so code (lib/) and runtime assets (rt/).
 #include "../loader/elf_loader.h"
@@ -196,6 +197,20 @@ int main(int argc, char **argv) {
   if (!m) { fprintf(stderr, "load failed\n"); return 1; }
   fprintf(stderr, "loaded, unresolved=%d\n", u);
   bionic_thread_enter();
+  { /* liblua's own internal PLT calls bypass the resolver: patch its GOT slots (APK 0.1.30 offsets) */
+    so_module *m = so_find("liblua_shared.so");
+    if (m) {
+      struct { size_t off; const char *n; void *hook; } g[] = {
+        {0x253e28, "luaL_newstate", (void *)my_luaL_newstate}, {0x253b20, "lua_newstate", (void *)my_lua_newstate}};
+      for (int i = 0; i < 2; i++) {
+        void **slot = (void **)(m->base + g[i].off); void *real = so_sym(m, g[i].n);
+        uintptr_t pg = (uintptr_t)slot & ~(uintptr_t)16383;
+        mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE);
+        fprintf(stderr, "[lua] GOT %s %p real %p -> %s\n", g[i].n, *slot, real, *slot == real ? "hooked" : "MISMATCH");
+        if (*slot == real) *slot = g[i].hook;
+      }
+    }
+  }
   so_init_all();
   int (*jni_onload)(void *, void *) = so_sym(m, "JNI_OnLoad");
   if (jni_onload) jni_onload(jni_vm(), NULL);
