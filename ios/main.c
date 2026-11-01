@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
 
   snprintf(lib, sizeof lib, "%s/lib", g_bundle);
   snprintf(rt, sizeof rt, "%s/rt", g_bundle);
-  snprintf(wr, sizeof wr, "%s/write", g_docs); mkdir(wr, 0755);
+  snprintf(wr, sizeof wr, "%s/../Library/GModWrite", g_docs); mkdir(wr, 0755); { char rp[1200]; if (realpath(wr, rp)) snprintf(wr, sizeof wr, "%s", rp); }
   snprintf(lnk, sizeof lnk, "%s/garrysmod/runtime", g_docs);
   unlink(lnk); symlink(rt, lnk);  // bundle path changes per install
   { // Windows GMod has no linux_fonts; engine (FreeType) needs them under platform/resource/linux_fonts
