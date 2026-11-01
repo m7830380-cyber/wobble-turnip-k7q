@@ -32,7 +32,7 @@ static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
 static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
   static int n, calls; unsigned o = filt;
   if (calls++ < 3) fprintf(stderr, "BLITCALL filter 0x%x mask 0x%x\n", filt, mask);
-  if (filt != 0x2600 && filt != 0x2601) filt = 0x2601;
+  if (filt != 0x2600 && filt != 0x2601) filt = (filt == 2) ? 0x2601 : 0x2600; /* D3DTEXF: 1=POINT 2=LINEAR */
   if (mask & 0x500) filt = 0x2600;
   if (o != filt && n++ < 10) fprintf(stderr, "BLITFIX filter 0x%x -> 0x%x mask 0x%x %dx%d->%dx%d\n", o, filt, mask, c-a, d-b, g-e, h-f);
   real_blit(a,b,c,d,e,f,g,h,mask,filt);
