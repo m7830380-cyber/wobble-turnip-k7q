@@ -111,6 +111,10 @@ static NSMutableArray<NSString *> *g_args;
   }
   [self.stack addArrangedSubview:mp];
 
+  UIButton *ws = [self button:@"Steam Workshop — browse & download addons" action:@selector(openWorkshop)];
+  ws.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; ws.layer.cornerRadius = 12; [ws.heightAnchor constraintEqualToConstant:46].active = YES;
+  [self.stack addArrangedSubview:ws];
+
   // Start
   UIStackView *c = (UIStackView *)[self card:@"START"];
   self.startBtn = [self button:@"" action:@selector(pickStart)];
@@ -307,6 +311,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     if (ip.length) { [D setObject:ip forKey:@"last_ip"]; [self launch:@"connect" target:ip]; } }]];
   [t addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; [self presentViewController:t animated:YES completion:nil];
 }
+- (void)openWorkshop { extern void workshop_present(UIViewController *); workshop_present(self); }
 - (void)play {
   BOOL map = [[D stringForKey:@"gmod_start_at"] isEqualToString:@"map"];
   [self launch:map ? @"map" : @"menu" target:[D stringForKey:@"gmod_map"] ?: @"gm_construct"];

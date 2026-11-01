@@ -308,6 +308,7 @@ int main(int argc, char **argv) {
   snprintf(lib, sizeof lib, "%s/lib", g_bundle);
   snprintf(rt, sizeof rt, "%s/rt", g_bundle);
   char ur[1200]; snprintf(ur, sizeof ur, "%s/../Library/user", g_docs); mkdir(ur, 0755); { char rp[1200]; if (realpath(ur, rp)) snprintf(ur, sizeof ur, "%s", rp); } snprintf(wr, sizeof wr, "%s/garrysmod", ur); mkdir(wr, 0755); { char rp[1200]; if (realpath(wr, rp)) snprintf(wr, sizeof wr, "%s", rp); }
+  { extern void workshop_set_root(const char *); workshop_set_root(g_docs); }
   { extern char **ios_run_launcher(const char *, const char *, int *); g_av = ios_run_launcher(g_docs, wr, &g_ac); }
   snprintf(lnk, sizeof lnk, "%s/garrysmod/runtime", g_docs);
   unlink(lnk); symlink(rt, lnk);  // bundle path changes per install
@@ -335,6 +336,7 @@ int main(int argc, char **argv) {
 
   platform_init();
   { extern void webview_init(void); webview_init(); }
+  { extern void workshop_jni_init(void); workshop_jni_init(); }
   bionic_gl_proc = ios_gl_proc;
   so_set_libdir(lib);
   so_skip("libSDL2.so");
