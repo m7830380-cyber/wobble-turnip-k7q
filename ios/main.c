@@ -29,7 +29,7 @@ static void *gl_proc(const char *n) {
   return r;
 }
 static void stbits(void);
-static int g_sdiag = -2; static short g_tw[65536],g_th[65536];
+static void dinfo(const char*,int); static int g_sdiag = -2; static short g_tw[65536],g_th[65536];
 #define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 6000) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
 static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
 static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
@@ -54,12 +54,7 @@ static void w_de(unsigned m,int c,unsigned t,const void*i){dinfo("dE",c);r_de(m,
 static void w_da(unsigned m,int f,int c){dinfo("dA",c);r_da(m,f,c);}
 static void w_bfb(unsigned t,unsigned f){SD("bindfb 0x%x %u",t,f);r_bfb(t,f);}
 
-static void dinfo(const char*k,int c){ if(g_sdiag<0||g_sdiag>=6000) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,vp[4]={0},at=0,tx=0,ws=0,bl=0,sf[4]={0}; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); r_giv(0x84E0,&at); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0BE1,sf); r_giv(0x0BE0,&sf[1]); r_giv(0x0B90,&ws);
- SD("%s %d fb %d vp %dx%d tex%d %u(%dx%d) blend %d st %d", k,c,fb,vp[2],vp[3],at-0x84C0,tx,tx<65536?g_tw[tx]:-1,tx<65536?g_th[tx]:-1,bl,ws); }
-static void (*r_dre)(unsigned,unsigned,unsigned,int,unsigned,const void*),(*r_debv)(unsigned,int,unsigned,const void*,int),(*r_drebv)(unsigned,unsigned,unsigned,int,unsigned,const void*,int);
-static void w_dre(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i){dinfo("dRE",c);r_dre(m,a,b,c,t,i);}
-static void w_debv(unsigned m,int c,unsigned t,const void*i,int bv){dinfo("dEBV",c);r_debv(m,c,t,i,bv);}
-static void w_drebv(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i,int bv){dinfo("dREBV",c);r_drebv(m,a,b,c,t,i,bv);}
+
 void *ios_gl_proc(const char *n);
 static void (*r_enable)(unsigned), (*r_disable)(unsigned), (*r_sfunc)(unsigned,int,unsigned), (*r_sop)(unsigned,unsigned,unsigned), (*r_smask)(unsigned), (*r_clear)(unsigned), (*r_cmask)(unsigned char,unsigned char,unsigned char,unsigned char);
 static void (*r_sfs)(unsigned,unsigned,int,unsigned), (*r_sos)(unsigned,unsigned,unsigned,unsigned), (*r_sms)(unsigned,unsigned);
@@ -77,7 +72,13 @@ static void (*r_rbs)(unsigned,unsigned,int,int), (*r_rbsm)(unsigned,int,unsigned
 static void (*r_ts2)(unsigned,int,unsigned,int,int); static void (*r_ti2)(unsigned,int,int,int,int,int,unsigned,unsigned,const void*);
 static int isdepth(unsigned f){ return f==0x81A5||f==0x81A6||f==0x81A7||f==0x1902||f==0x8CAC; }
 static int curb(unsigned q){ int v=0; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); r_giv(q,&v); return v; }
-static int g_srgbfix=-1; static int srgbfix(void){ if(g_srgbfix<0){ const char*e=getenv("GMOD_SRGB_FIX"); g_srgbfix=!(e&&*e=='0'); } return g_srgbfix; }
+
+static void dinfo(const char*k,int c){ if(g_sdiag<0||g_sdiag>=6000) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,vp[4]={0},at=0,tx=0,ws=0,bl=0,sf[4]={0}; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); r_giv(0x84E0,&at); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0BE1,sf); r_giv(0x0BE0,&sf[1]); r_giv(0x0B90,&ws);
+ SD("%s %d fb %d vp %dx%d tex%d %u(%dx%d) blend %d st %d", k,c,fb,vp[2],vp[3],at-0x84C0,tx,tx<65536?g_tw[tx]:-1,tx<65536?g_th[tx]:-1,bl,ws); }
+static void (*r_dre)(unsigned,unsigned,unsigned,int,unsigned,const void*),(*r_debv)(unsigned,int,unsigned,const void*,int),(*r_drebv)(unsigned,unsigned,unsigned,int,unsigned,const void*,int);
+static void w_dre(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i){dinfo("dRE",c);r_dre(m,a,b,c,t,i);}
+static void w_debv(unsigned m,int c,unsigned t,const void*i,int bv){dinfo("dEBV",c);r_debv(m,c,t,i,bv);}
+static void w_drebv(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i,int bv){dinfo("dREBV",c);r_drebv(m,a,b,c,t,i,bv);}static int g_srgbfix=-1; static int srgbfix(void){ if(g_srgbfix<0){ const char*e=getenv("GMOD_SRGB_FIX"); g_srgbfix=!(e&&*e=='0'); } return g_srgbfix; }
 static void w_rbs(unsigned t,unsigned f,int w,int h){ if(f==0x8C43&&srgbfix()) f=0x8058; DSL("rbs fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ DSL("rb depth 0x%x -> DS %dx%d",f,w,h); f=0x88F0; int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } else if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbs(t,f,w,h); }
 static void w_rbsm(unsigned t,int n,unsigned f,int w,int h){ if(f==0x8C43&&srgbfix()) f=0x8058; DSL("rbsm n%d fmt 0x%x %dx%d",n,f,w,h); if(isdepth(f)) f=0x88F0; if(f==0x88F0||f==0x8CAD){ int b=curb(0x8CA7); if(b>=0&&b<65536) g_dsrb[b]=1; } r_rbsm(t,n,f,w,h); }
 static void w_frb(unsigned t,unsigned a,unsigned rt,unsigned rb){ DSL("frb att 0x%x rb %u ds%d",a,rb,rb<65536?g_dsrb[rb]:-1); if(a==0x8D00&&rb<65536&&g_dsrb[rb]){ a=0x821A;  } r_frb(t,a,rt,rb); }
