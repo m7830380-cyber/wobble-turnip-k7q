@@ -66,7 +66,7 @@ static void w_frb(unsigned t,unsigned a,unsigned rt,unsigned rb){ DSL("frb att 0
 static void w_ts2(unsigned t,int l,unsigned f,int w,int h){ if(f==0x8C43||f==0x8C41) DSL("ts2 srgb 0x%x %dx%d",f,w,h); if(f<0x8000||isdepth(f)||f==0x88F0||f==0x8CAD) DSL("ts2 fmt 0x%x %dx%d",f,w,h); if(isdepth(f)){ f=0x88F0; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1;  } r_ts2(t,l,f,w,h); }
 static void w_ti2(unsigned t,int l,int f,int w,int h,int bd,unsigned fm,unsigned ty,const void*p){ if((f==0x8C43||f==0x8C41)&&!p&&srgbfix()){ DSL("srgb rt 0x%x -> rgba8 %dx%d",f,w,h); f=(f==0x8C43)?0x8058:0x8051; } if(fm==0x1902||fm==0x84F9) DSL("ti2 if 0x%x fm 0x%x ty 0x%x %dx%d",f,fm,ty,w,h); if(fm==0x1902&&isdepth(f)){ f=0x88F0; fm=0x84F9; ty=0x84FA; p=NULL; int b=curb(0x8069); if(b>=0&&b<65536) g_dstx[b]=1; DSL("teximg depth -> DS %dx%d",w,h); } r_ti2(t,l,f,w,h,bd,fm,ty,p); }
 static void w_ft2(unsigned t,unsigned a,unsigned tt,unsigned tx,int l){ if(a!=0x8CE0) DSL("ft2 att 0x%x tex %u ds%d",a,tx,tx<65536?g_dstx[tx]:-1); if(a==0x8D00&&tx<65536&&g_dstx[tx]) a=0x821A; r_ft2(t,a,tt,tx,l); }
-static void w_enable(unsigned c) { if (c == 0xB90) { SD("enable stencil%s", ""); stbits(); } r_enable(c); }
+static void w_enable(unsigned c) { if (c == 0xB90) { if (g_sdiag < 0) g_sdiag = 0; SD("enable stencil%s", ""); stbits(); } r_enable(c); }
 static void w_disable(unsigned c) { if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
 static void w_sfunc(unsigned f, int r, unsigned m) { SD("func 0x%x ref %d mask 0x%x", f, r, m); r_sfunc(f, r, m); }
 static void w_sop(unsigned a, unsigned b, unsigned c) { SD("op 0x%x 0x%x 0x%x", a, b, c); r_sop(a, b, c); }
