@@ -100,7 +100,30 @@ int gs_SDL_GL_MakeCurrent(SDL_Window *w, SDL_GLContext c) {
   (void)w; if (!g_dpy) return -1;
   return p_eglMakeCurrent(g_dpy, c ? g_surf : NULL, c ? g_surf : NULL, c) ? 0 : -1;
 }
-void gs_SDL_GL_SwapWindow(SDL_Window *w) { (void)w; if (g_dpy && g_surf) p_eglSwapBuffers(g_dpy, g_surf); }
+static int sw_n, sw_black = -1;
+static void dbgcb(unsigned src, unsigned type, unsigned id, unsigned sev, int len, const char *msg, const void *u) {
+  static int c; if (type == 0x824C && c++ < 400) fprintf(stderr, "GLDBG err id=%u sev=%x: %s\n", id, sev, msg);
+}
+void gs_SDL_GL_SwapWindow(SDL_Window *w) {
+  (void)w; if (!(g_dpy && g_surf)) return;
+  static void (*gi)(unsigned, int *); static void (*rp)(int,int,int,int,unsigned,unsigned,void*); static void (*bf)(unsigned,unsigned);
+  static unsigned (*ge)(void); static void (*dc)(void*, const void*); static void (*en)(unsigned);
+  if (!rp) { rp = ios_gl_proc("glReadPixels"); bf = ios_gl_proc("glBindFramebuffer"); gi = ios_gl_proc("glGetIntegerv"); ge = ios_gl_proc("glGetError");
+    dc = ios_gl_proc("glDebugMessageCallbackKHR"); en = ios_gl_proc("glEnable");
+    if (dc && en) { en(0x92E0); en(0x8242); dc((void*)dbgcb, 0); fprintf(stderr, "GLDBG callback on\n"); } }
+  sw_n++;
+  int fb = 0, vp[4] = {0}; gi(0x8CAA, &fb); gi(0x0BA2, vp);
+  unsigned e = ge();
+  bf(0x8CA8, 0); unsigned char px[3][4] = {{0}}; int W = vp[2] > 0 ? vp[2] : 100, H = vp[3] > 0 ? vp[3] : 100;
+  rp(W/2, H/2, 1, 1, 0x1908, 0x1401, px[0]); rp(W/4, H/4, 1, 1, 0x1908, 0x1401, px[1]); rp(W*3/4, H*3/4, 1, 1, 0x1908, 0x1401, px[2]);
+  bf(0x8CA9, fb);
+  int black = 1; for (int i = 0; i < 3; i++) if (px[i][0] > 8 || px[i][1] > 8 || px[i][2] > 8) black = 0;
+  if (black != sw_black || e || (sw_n % 600) == 0)
+    fprintf(stderr, "SWAPDIAG #%d black=%d glerr=0x%x drawfb=%d vp=%d,%d %dx%d px=%d,%d,%d,%d %d,%d,%d %d,%d,%d\n", sw_n, black, e, fb, vp[0], vp[1], vp[2], vp[3],
+      px[0][0], px[0][1], px[0][2], px[0][3], px[1][0], px[1][1], px[1][2], px[2][0], px[2][1], px[2][2]);
+  sw_black = black;
+  p_eglSwapBuffers(g_dpy, g_surf);
+}
 int gs_SDL_GL_SetSwapInterval(int i) { return g_dpy && p_eglSwapInterval(g_dpy, i) ? 0 : -1; }
 int gs_SDL_GL_GetSwapInterval(void) { return 1; }
 SDL_GLContext gs_SDL_GL_GetCurrentContext(void) { return p_eglGetCurrentContext ? p_eglGetCurrentContext() : NULL; }
