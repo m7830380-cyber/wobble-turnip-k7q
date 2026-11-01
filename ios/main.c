@@ -116,8 +116,16 @@ UM(um2) UM(um3) UM(um4) UM(um23) UM(um32) UM(um24) UM(um42) UM(um34) UM(um43)
 static void *my_eglGetProcAddress(const char *n) { return ios_gl_proc(n); }
 void *ios_gl_proc(const char *n) {
   if (!strcmp(n, "eglGetProcAddress")) return (void*)my_eglGetProcAddress;
+static void (*r_shsrc)(unsigned,int,const char*const*,const int*); static FILE*g_shf; static int g_shn;
+static void w_shsrc(unsigned sh,int n,const char*const*str,const int*len){
+  if(!g_shf){ char pth[1024]; snprintf(pth,sizeof pth,"%s/Documents/gmod_shaders.txt",getenv("HOME")); g_shf=fopen(pth,"w"); }
+  if(g_shf && g_shn<4000){ g_shn++; fprintf(g_shf,"\n===== SHADER %u =====\n",sh); for(int i=0;i<n;i++){ if(len&&len[i]>=0) fwrite(str[i],1,len[i],g_shf); else fputs(str[i],g_shf);} fflush(g_shf); }
+  r_shsrc(sh,n,str,len); }
+static void (*r_attsh)(unsigned,unsigned);
+static void w_attsh(unsigned p,unsigned sh){ if(g_shf){ fprintf(g_shf,"\n##### ATTACH prog %u shader %u\n",p,sh); fflush(g_shf);} r_attsh(p,sh); }
+
 #define W(nm, r, w) if (!strcmp(n, nm)) { if (!r) r = gl_proc(nm); return r ? (void*)w : NULL; }
-  W("glDrawRangeElements", r_dre, w_dre) W("glDrawElementsBaseVertex", r_debv, w_debv) W("glDrawElementsBaseVertexEXT", r_debv, w_debv) W("glDrawElementsBaseVertexOES", r_debv, w_debv) W("glDrawRangeElementsBaseVertex", r_drebv, w_drebv) W("glDrawRangeElementsBaseVertexEXT", r_drebv, w_drebv) W("glDrawRangeElementsBaseVertexOES", r_drebv, w_drebv) W("glBlendFunc", r_bf, w_bf) W("glBlendFuncSeparate", r_bfs, w_bfs) W("glBlendEquation", r_be, w_be) W("glBlendEquationSeparate", r_bes, w_bes) W("glViewport", r_vp, w_vp) W("glUseProgram", r_up, w_up) W("glDrawElements", r_de, w_de) W("glDrawArrays", r_da, w_da) W("glBindFramebuffer", r_bfb, w_bfb) W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
+  W("glShaderSource", r_shsrc, w_shsrc) W("glAttachShader", r_attsh, w_attsh) W("glDrawRangeElements", r_dre, w_dre) W("glDrawElementsBaseVertex", r_debv, w_debv) W("glDrawElementsBaseVertexEXT", r_debv, w_debv) W("glDrawElementsBaseVertexOES", r_debv, w_debv) W("glDrawRangeElementsBaseVertex", r_drebv, w_drebv) W("glDrawRangeElementsBaseVertexEXT", r_drebv, w_drebv) W("glDrawRangeElementsBaseVertexOES", r_drebv, w_drebv) W("glBlendFunc", r_bf, w_bf) W("glBlendFuncSeparate", r_bfs, w_bfs) W("glBlendEquation", r_be, w_be) W("glBlendEquationSeparate", r_bes, w_bes) W("glViewport", r_vp, w_vp) W("glUseProgram", r_up, w_up) W("glDrawElements", r_de, w_de) W("glDrawArrays", r_da, w_da) W("glBindFramebuffer", r_bfb, w_bfb) W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
   W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask) W("glRenderbufferStorage", r_rbs, w_rbs) W("glRenderbufferStorageMultisample", r_rbsm, w_rbsm)
   W("glFramebufferRenderbuffer", r_frb, w_frb) W("glTexStorage2D", r_ts2, w_ts2) W("glTexImage2D", r_ti2, w_ti2) W("glFramebufferTexture2D", r_ft2, w_ft2) W("glStencilFuncSeparate", r_sfs, w_sfs) W("glStencilOpSeparate", r_sos, w_sos) W("glStencilMaskSeparate", r_sms, w_sms) W("glDepthMask", r_dmask, w_dmask) W("glVertexAttribPointer", r_vap, w_vap) W("glSampleCoverage", r_scov, w_scov)
   W("glUniformMatrix2fv", r_um2, w_um2) W("glUniformMatrix3fv", r_um3, w_um3) W("glUniformMatrix4fv", r_um4, w_um4)
