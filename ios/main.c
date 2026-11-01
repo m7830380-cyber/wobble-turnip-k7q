@@ -28,6 +28,7 @@ static void *gl_proc(const char *n) {
   if (!r && g_egl) r = dlsym(g_egl, n);
   return r;
 }
+static void stbits(void);
 static int g_sdiag = -1; /* starts after first blit */
 #define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 500) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
 static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
