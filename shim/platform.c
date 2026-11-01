@@ -42,7 +42,9 @@ J(j_self) { UNUSED; RET_L(jni_activity()); }
 J(j_newobj) { UNUSED; RET_L(jni_new_object("java/lang/Object")); }
 J(j_getClassLoader) { UNUSED; RET_L(jni_new_object("java/lang/ClassLoader")); }
 J(j_loadClass) { (void)env; (void)thiz;
-  const char *n = jni_str(a[0].l); extern void *jni_find_class_pub(const char *); RET_L(jni_find_class_pub(n ? n : "?")); }
+  const char *n = jni_str(a[0].l); extern void *jni_find_class_pub(const char *);
+  char b[256]; snprintf(b, sizeof b, "%s", n ? n : "?"); for (char *q = b; *q; q++) if (*q == '.') *q = '/';
+  fprintf(stderr, "[jni] loadClass '%s' -> %s\n", n ? n : "(null)", b); RET_L(jni_find_class_pub(b)); }
 J(j_getResources) { UNUSED; RET_L(jni_new_object("android/content/res/Resources")); }
 J(j_getConfiguration) { UNUSED; RET_L(jni_new_object("android/content/res/Configuration")); }
 J(j_toString) { UNUSED; RET_STR(""); }
