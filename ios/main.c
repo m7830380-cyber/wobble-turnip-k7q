@@ -30,13 +30,17 @@ static void *gl_proc(const char *n) {
 }
 static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
 static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
-  static int n; unsigned o = filt;
+  static int n, calls; unsigned o = filt;
+  if (calls++ < 3) fprintf(stderr, "BLITCALL filter 0x%x mask 0x%x\n", filt, mask);
   if (filt != 0x2600 && filt != 0x2601) filt = 0x2601;
   if (mask & 0x500) filt = 0x2600;
   if (o != filt && n++ < 10) fprintf(stderr, "BLITFIX filter 0x%x -> 0x%x mask 0x%x %dx%d->%dx%d\n", o, filt, mask, c-a, d-b, g-e, h-f);
   real_blit(a,b,c,d,e,f,g,h,mask,filt);
 }
+void *ios_gl_proc(const char *n);
+static void *my_eglGetProcAddress(const char *n) { return ios_gl_proc(n); }
 void *ios_gl_proc(const char *n) {
+  if (!strcmp(n, "eglGetProcAddress")) return (void*)my_eglGetProcAddress;
   if (!strcmp(n, "glBlitFramebuffer") || !strcmp(n, "glBlitFramebufferANGLE") || !strcmp(n, "glBlitFramebufferEXT")) {
     if (!real_blit) real_blit = gl_proc("glBlitFramebuffer");
     return real_blit ? (void*)fix_blit : NULL;
