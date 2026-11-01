@@ -29,7 +29,7 @@ static void *gl_proc(const char *n) {
   return r;
 }
 static int g_sdiag = -1; /* starts after first blit */
-#define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 120) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
+#define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 500) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
 static void (*real_blit)(int,int,int,int,int,int,int,int,unsigned,unsigned);
 static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned mask,unsigned filt) {
   static int n, calls; unsigned o = filt;
@@ -38,12 +38,18 @@ static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned ma
   if (mask & 0x500) filt = 0x2600;
   if (o != filt && n++ < 10) fprintf(stderr, "BLITFIX filter 0x%x -> 0x%x mask 0x%x %dx%d->%dx%d\n", o, filt, mask, c-a, d-b, g-e, h-f);
   if (g_sdiag < 0) g_sdiag = 0;
-  SD("blit %dx%d->%dx%d", c-a, d-b, g-e, h-f);
+  SD("blit %dx%d->%dx%d", c-a, d-b, g-e, h-f); stbits();
   real_blit(a,b,c,d,e,f,g,h,mask,filt);
 }
 void *ios_gl_proc(const char *n);
 static void (*r_enable)(unsigned), (*r_disable)(unsigned), (*r_sfunc)(unsigned,int,unsigned), (*r_sop)(unsigned,unsigned,unsigned), (*r_smask)(unsigned), (*r_clear)(unsigned), (*r_cmask)(unsigned char,unsigned char,unsigned char,unsigned char);
-static void w_enable(unsigned c) { if (c == 0xB90) SD("enable stencil%s", ""); r_enable(c); }
+static void (*r_sfs)(unsigned,unsigned,int,unsigned), (*r_sos)(unsigned,unsigned,unsigned,unsigned), (*r_sms)(unsigned,unsigned);
+static void (*r_giv)(unsigned,int*);
+static void w_sfs(unsigned f,unsigned fn,int r,unsigned m){ SD("funcS 0x%x 0x%x ref %d mask 0x%x",f,fn,r,m); r_sfs(f,fn,r,m); }
+static void w_sos(unsigned f,unsigned a,unsigned b,unsigned c){ SD("opS 0x%x 0x%x 0x%x 0x%x",f,a,b,c); r_sos(f,a,b,c); }
+static void w_sms(unsigned f,unsigned m){ SD("wmaskS 0x%x 0x%x",f,m); r_sms(f,m); }
+static void stbits(void){ if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,b=-1; r_giv(0x8CA6,&fb); r_giv(0x0D57,&b); SD("fbo %d stencilbits %d",fb,b); }
+static void w_enable(unsigned c) { if (c == 0xB90) { SD("enable stencil%s", ""); stbits(); } r_enable(c); }
 static void w_disable(unsigned c) { if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
 static void w_sfunc(unsigned f, int r, unsigned m) { SD("func 0x%x ref %d mask 0x%x", f, r, m); r_sfunc(f, r, m); }
 static void w_sop(unsigned a, unsigned b, unsigned c) { SD("op 0x%x 0x%x 0x%x", a, b, c); r_sop(a, b, c); }
@@ -61,7 +67,7 @@ void *ios_gl_proc(const char *n) {
   if (!strcmp(n, "eglGetProcAddress")) return (void*)my_eglGetProcAddress;
 #define W(nm, r, w) if (!strcmp(n, nm)) { if (!r) r = gl_proc(nm); return r ? (void*)w : NULL; }
   W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
-  W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask) W("glDepthMask", r_dmask, w_dmask) W("glVertexAttribPointer", r_vap, w_vap) W("glSampleCoverage", r_scov, w_scov)
+  W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask) W("glStencilFuncSeparate", r_sfs, w_sfs) W("glStencilOpSeparate", r_sos, w_sos) W("glStencilMaskSeparate", r_sms, w_sms) W("glDepthMask", r_dmask, w_dmask) W("glVertexAttribPointer", r_vap, w_vap) W("glSampleCoverage", r_scov, w_scov)
   W("glUniformMatrix2fv", r_um2, w_um2) W("glUniformMatrix3fv", r_um3, w_um3) W("glUniformMatrix4fv", r_um4, w_um4)
   W("glUniformMatrix2x3fv", r_um23, w_um23) W("glUniformMatrix3x2fv", r_um32, w_um32) W("glUniformMatrix2x4fv", r_um24, w_um24)
   W("glUniformMatrix4x2fv", r_um42, w_um42) W("glUniformMatrix3x4fv", r_um34, w_um34) W("glUniformMatrix4x3fv", r_um43, w_um43)
