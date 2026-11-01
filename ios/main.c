@@ -181,8 +181,12 @@ static void lua_patch_once(void) {
   fprintf(stderr, "[lua] ctr cache was %llx (mprotect %d)\n", (unsigned long long)*c, r); *c = 0x8444c004ULL;
   so_module *cl = so_find("libclient.so");
   if (cl) { uint32_t *ins = (uint32_t *)(cl->base + 0x968d7c); uintptr_t p2 = (uintptr_t)ins & ~(uintptr_t)16383;
-    if (*ins == 0x36000360) { int a = mprotect((void *)p2, 16384, PROT_READ | PROT_WRITE); *ins = 0x1400001b;
-      int b = mprotect((void *)p2, 16384, PROT_READ | PROT_EXEC); sys_icache_invalidate(ins, 4);
+    extern void *so_wptr(void *); extern int so_is_mirrored(void *);
+    if (*ins == 0x36000360) { int a = 0, b = 0;
+      if (so_is_mirrored(ins)) *(uint32_t *)so_wptr(ins) = 0x1400001b;
+      else { a = mprotect((void *)p2, 16384, PROT_READ | PROT_WRITE); *ins = 0x1400001b;
+             b = mprotect((void *)p2, 16384, PROT_READ | PROT_EXEC); }
+      sys_icache_invalidate(ins, 4);
       fprintf(stderr, "[halo] transparent-entity refusal patched (%d %d)\n", a, b); }
     else fprintf(stderr, "[halo] patch: unexpected insn %08x\n", *ins); }
 }
@@ -215,11 +219,14 @@ static int exists(const char *a, const char *b) {
 }
 
 extern int csops(int pid, unsigned int ops, void *useraddr, size_t usersize);
-static int jit_enabled(void) { unsigned int f = 0; csops(getpid(), 0, &f, sizeof f); return (f & 0x10000000) != 0; }
+extern int so_jit_mode(void), so_jit_traced(void);
+static int jit_enabled(void) { unsigned int f = 0; csops(getpid(), 0, &f, sizeof f);
+  if (!(f & 0x10000000)) return 0;
+  return so_jit_mode() == 1 || so_jit_traced(); /* TXM (iOS 26, A15+) needs StikDebug still attached */ }
 static void wait_for_jit(void) {
   while (!jit_enabled()) {
     const SDL_MessageBoxButtonData btn[] = {{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Retry"}, {0, 0, "Quit"}};
-    SDL_MessageBoxData d = {SDL_MESSAGEBOX_WARNING, NULL, "GMod", "JIT is not enabled.\n\nLaunch with JIT: TrollStore -> long-press GMod -> Open with JIT, or use StikDebug.\nThen tap Retry.", 2, btn, NULL};
+    SDL_MessageBoxData d = {SDL_MESSAGEBOX_WARNING, NULL, "GMod", "JIT is not enabled.\n\nLaunch with JIT: TrollStore -> long-press GMod -> Open with JIT, or StikDebug.\niOS 26: in StikDebug long-press GMod -> Assign Script -> universal.js, then launch.\nThen tap Retry.", 2, btn, NULL};
     int b = 0; SDL_ShowMessageBox(&d, &b); if (b == 0) exit(0);
   }
 }

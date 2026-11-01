@@ -11,6 +11,9 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <libkern/OSCacheControl.h>
+#endif
 
 #define RA_ABS64 257
 #define RA_GLOB_DAT 1025
@@ -21,6 +24,38 @@
 #define PUP(x) PDOWN((x) + PG - 1)
 
 static so_module *g_mods;
+#ifdef __APPLE__
+int so_jit_mode(void); int so_jit_traced(void);
+#endif
+/* TXM: executable ranges get a writable mirror; all writes into code go through so_wptr */
+static struct { uint8_t *rx, *rw; size_t len; } g_mir[256]; static int g_nmir;
+void *so_wptr(void *p) {
+  for (int i = 0; i < g_nmir; i++) if ((uint8_t *)p >= g_mir[i].rx && (uint8_t *)p < g_mir[i].rx + g_mir[i].len)
+    return g_mir[i].rw + ((uint8_t *)p - g_mir[i].rx);
+  return p;
+}
+int so_is_mirrored(void *p) { return so_wptr(p) != p; }
+#ifdef __APPLE__
+extern void *so_jit_prepare(void *addr, size_t len, uint8_t **rw);
+#endif
+/* TXM: whole image comes from the debugger as RX (+RW mirror); data pages are then replaced by plain RW */
+static uint8_t *g_img_rw;
+static uint8_t *alloc_image(size_t len, int *txm) {
+  *txm = 0; g_img_rw = NULL;
+#ifdef __APPLE__
+  if (so_jit_mode() == 2) {
+    if (!so_jit_traced()) { fprintf(stderr, "[jit] TXM device but no debugger attached\n"); return MAP_FAILED; }
+    uint8_t *rw = NULL, *rx = so_jit_prepare(NULL, len, &rw);
+    if (!rx) return MAP_FAILED;
+    *txm = 1; g_img_rw = rw; return rx;
+  }
+#endif
+  return mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+}
+static void add_mirror(uint8_t *rx, size_t len, uint8_t *rw) {
+  if (g_nmir < 256) { g_mir[g_nmir].rx = rx; g_mir[g_nmir].rw = rw; g_mir[g_nmir].len = len; g_nmir++; }
+}
+
 static so_resolver g_resolver, g_late;
 void so_set_resolver(so_resolver r) { g_resolver = r; }
 void so_set_late_resolver(so_resolver r) { g_late = r; }
@@ -128,15 +163,31 @@ so_module *so_load(const char *path, int *unresolved) {
   }
 #endif
   size_t tsz = PUP(nsite * 16);
-  uint8_t *base = mmap(NULL, sz + tsz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  int txm = 0;
+  uint8_t *base = alloc_image(sz + tsz, &txm);
   if (base == MAP_FAILED) return NULL;
   so_module *m = calloc(1, sizeof *m);
   m->base = base; m->size = sz;
   const char *bn = strrchr(path, '/');
   snprintf(m->name, sizeof m->name, "%s", bn ? bn + 1 : path);
+  if (txm) {
+    uint8_t *mir = g_img_rw;
+    for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD) {
+      uint64_t a = PDOWN(ph[i].p_vaddr), e = PUP(ph[i].p_vaddr + ph[i].p_memsz);
+      if (ph[i].p_flags & PF_X) add_mirror(base + a, e - a, mir + a);
+    }
+    if (tsz) add_mirror(base + sz, tsz, mir + sz);
+    /* every page not covered by an exec segment becomes ordinary RW memory */
+    for (size_t off = 0; off < sz; off += PG) {
+      if (so_is_mirrored(base + off)) continue;
+      if (mmap(base + off, PG, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED)
+        { fprintf(stderr, "[%s] data page remap failed at %zx\n", m->name, off); return NULL; }
+    }
+    fprintf(stderr, "[%s] TXM image rx %p\n", m->name, base);
+  }
   Elf64_Dyn *dyn = NULL;
   for (int i = 0; i < eh->e_phnum; i++) {
-    if (ph[i].p_type == PT_LOAD) memcpy(base + ph[i].p_vaddr, f + ph[i].p_offset, ph[i].p_filesz);
+    if (ph[i].p_type == PT_LOAD) memcpy(so_wptr(base + ph[i].p_vaddr), f + ph[i].p_offset, ph[i].p_filesz);
     if (ph[i].p_type == PT_DYNAMIC) dyn = (Elf64_Dyn *)(base + ph[i].p_vaddr);
     if (ph[i].p_type == PT_TLS) { m->tls_init = base + ph[i].p_vaddr; m->tls_filesz = ph[i].p_filesz; m->tls_memsz = ph[i].p_memsz; }
   }
@@ -147,12 +198,12 @@ so_module *so_load(const char *path, int *unresolved) {
     for (int i = 0; i < eh->e_phnum; i++) if (ph[i].p_type == PT_LOAD && (ph[i].p_flags & PF_X)) {
       uint32_t *c = (uint32_t *)(base + ph[i].p_vaddr);
       for (size_t k = 0; k < ph[i].p_filesz / 4; k++) if ((c[k] & 0xFFFFFFE0u) == 0xD53BD040u) {
-        uint32_t r = c[k] & 31; uint32_t *th = t + n * 4; n++;
-        th[0] = 0xD53BD060u | r;                                         /* mrs  xr, tpidrro_el0 */
-        th[1] = 0x92400000u | (61u << 16) | (60u << 10) | (r << 5) | r;   /* and  xr, xr, #~7 */
-        th[2] = 0xF9400000u | ((uint32_t)so_tp_slot << 10) | (r << 5) | r; /* ldr  xr, [xr, #slot*8] */
-        th[3] = 0x14000000u | ((uint32_t)((c + k + 1) - (th + 3)) & 0x3FFFFFF); /* b back */
-        c[k] = 0x14000000u | ((uint32_t)(th - (c + k)) & 0x3FFFFFF);       /* b thunk */
+        uint32_t r = c[k] & 31; uint32_t *th = t + n * 4, *tw = so_wptr(th); n++;
+        tw[0] = 0xD53BD060u | r;                                         /* mrs  xr, tpidrro_el0 */
+        tw[1] = 0x92400000u | (61u << 16) | (60u << 10) | (r << 5) | r;   /* and  xr, xr, #~7 */
+        tw[2] = 0xF9400000u | ((uint32_t)so_tp_slot << 10) | (r << 5) | r; /* ldr  xr, [xr, #slot*8] */
+        tw[3] = 0x14000000u | ((uint32_t)((c + k + 1) - (th + 3)) & 0x3FFFFFF); /* b back */
+        *(uint32_t *)so_wptr(c + k) = 0x14000000u | ((uint32_t)(th - (c + k)) & 0x3FFFFFF);       /* b thunk */
       }
     }
     fprintf(stderr, "[%s] patched %zu tpidr_el0 reads\n", m->name, n);
@@ -198,7 +249,7 @@ so_module *so_load(const char *path, int *unresolved) {
   Elf64_Sym *syms = m->dynsym;
   for (int t = 0; t < 3; t++) for (size_t i = 0; tabs[t] && i < cnt[t]; i++) {
     Elf64_Rela *r = &tabs[t][i];
-    uint64_t *where = (uint64_t *)(base + r->r_offset);
+    uint64_t *where = (uint64_t *)so_wptr(base + r->r_offset);
     uint32_t type = ELF64_R_TYPE(r->r_info), si = ELF64_R_SYM(r->r_info);
     void *val = NULL;
     if (si) {
@@ -226,9 +277,13 @@ so_module *so_load(const char *path, int *unresolved) {
              (ph[i].p_flags & PF_X ? PROT_EXEC : 0);
     uint64_t a = PDOWN(ph[i].p_vaddr), e = PUP(ph[i].p_vaddr + ph[i].p_memsz);
     if (pr & PROT_EXEC) pr &= ~PROT_WRITE;
-    mprotect(base + a, e - a, pr);
+    if ((pr & PROT_EXEC) && txm) continue;
+    if (mprotect(base + a, e - a, pr)) fprintf(stderr, "[%s] mprotect %llx %d failed\n", m->name, (unsigned long long)a, pr);
   }
-  if (tsz) mprotect(base + sz, tsz, PROT_READ | PROT_EXEC);
+  if (tsz && !txm) mprotect(base + sz, tsz, PROT_READ | PROT_EXEC);
+#ifdef __APPLE__
+  if (txm) for (int i = 0; i < g_nmir; i++) sys_icache_invalidate(g_mir[i].rx, g_mir[i].len);
+#endif
   munmap(f, st.st_size);
   if (unresolved) *unresolved = bad;
   return m;
