@@ -214,6 +214,7 @@ static void *watchdog(void *a) {
   return a;
 }
 
+static int g_ac; static char **g_av;
 int main(int argc, char **argv) {
   snprintf(g_bundle, sizeof g_bundle, "%s", ios_bundle_path());
   snprintf(g_docs, sizeof g_docs, "%s", ios_documents_path());
@@ -232,6 +233,7 @@ int main(int argc, char **argv) {
   snprintf(lib, sizeof lib, "%s/lib", g_bundle);
   snprintf(rt, sizeof rt, "%s/rt", g_bundle);
   char ur[1200]; snprintf(ur, sizeof ur, "%s/../Library/user", g_docs); mkdir(ur, 0755); { char rp[1200]; if (realpath(ur, rp)) snprintf(ur, sizeof ur, "%s", rp); } snprintf(wr, sizeof wr, "%s/garrysmod", ur); mkdir(wr, 0755); { char rp[1200]; if (realpath(wr, rp)) snprintf(wr, sizeof wr, "%s", rp); }
+  { extern char **ios_run_launcher(const char *, const char *, int *); g_av = ios_run_launcher(g_docs, wr, &g_ac); }
   snprintf(lnk, sizeof lnk, "%s/garrysmod/runtime", g_docs);
   unlink(lnk); symlink(rt, lnk);  // bundle path changes per install
   { // Windows GMod has no linux_fonts; engine (FreeType) needs them under platform/resource/linux_fonts
@@ -291,8 +293,7 @@ int main(int argc, char **argv) {
   int (*jni_onload)(void *, void *) = so_sym(m, "JNI_OnLoad");
   if (jni_onload) jni_onload(jni_vm(), NULL);
   int (*lma)(int, char **) = so_sym(m, "LauncherMainAndroid");
-  char *av[] = {"gmod", "-game", "garrysmod", NULL};
-  int r = lma(3, av);
+  int r = lma(g_ac, g_av);
   fprintf(stderr, "LauncherMainAndroid returned %d\n", r);
   return r;
 }

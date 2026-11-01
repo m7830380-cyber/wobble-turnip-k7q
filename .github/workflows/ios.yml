@@ -30,6 +30,7 @@ jobs:
           $CC -fobjc-arc -c ios/paths.m -o paths.o
           $CC -fobjc-arc -c ios/glctx.m -o glctx.o
           $CC -fobjc-arc -c ios/webview.m -o webview.o
+          $CC -fobjc-arc -c ios/launcher.m -o launcher.o
           $CC -o gmod *.o -F$FW -framework SDL2 -framework Foundation -framework UIKit -framework Metal -framework QuartzCore -framework WebKit -framework CoreGraphics -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path/Frameworks/SDL2.framework -Wl,-rpath,@executable_path/Frameworks/libEGL.framework -Wl,-rpath,@executable_path/Frameworks/libGLESv2.framework
       - name: Package
         run: |
