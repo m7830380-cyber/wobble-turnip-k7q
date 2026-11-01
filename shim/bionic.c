@@ -245,7 +245,7 @@ const char *bionic_path(const char *p) {
   static __thread char buf[2048];
   if (p && !strcmp(p, "/proc/meminfo")) {
     static char mi[1100]; static int done;
-    if (!done) { done = 1; snprintf(mi, sizeof mi, "%s/write/.meminfo", g_root);
+    if (!done) { done = 1; snprintf(mi, sizeof mi, "%s/.meminfo", g_root);
       unsigned long long tot = 4ULL << 30;
 #ifdef __APPLE__
       size_t l = sizeof tot; sysctlbyname("hw.memsize", &tot, &l, NULL, 0);
