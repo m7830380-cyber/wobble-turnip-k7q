@@ -172,7 +172,9 @@ int bionic_oflags(int f) {
 #endif
 }
 static int b_open(const char *p, int fl, ...) { va_list a; va_start(a, fl); int m = va_arg(a, int); va_end(a); return open(bionic_path(p), bionic_oflags(fl), m); }
-static int b_openat(int d, const char *p, int fl, ...) { va_list a; va_start(a, fl); int m = va_arg(a, int); va_end(a); return openat(d, bionic_path(p), bionic_oflags(fl), m); }
+#define BFD(d) ((d) == -100 ? AT_FDCWD : (d))  /* bionic AT_FDCWD -100, Darwin -2 */
+static int b_openat(int d, const char *p, int fl, ...) { va_list a; va_start(a, fl); int m = va_arg(a, int); va_end(a); return openat(BFD(d), bionic_path(p), bionic_oflags(fl), m); }
+static int b_renameat(int d1, const char *a, int d2, const char *b) { char t[1100]; snprintf(t, sizeof t, "%s", bionic_path(a)); return renameat(BFD(d1), t, BFD(d2), bionic_path(b)); }
 
 /* ---------------- struct stat (bionic arm64 layout, 128 bytes) ---------------- */
 struct bstat {
@@ -412,7 +414,7 @@ extern int so_jit_mode(void);
 static int lua_mcode_caller(void *ra) {
   static so_module *lm; if (!lm) lm = so_find("liblua_shared.so"); if (!lm) return 0;
   uintptr_t off = (uintptr_t)ra - (uintptr_t)lm->base;
-  return off == 0x9fbd4 || off == 0x9fc98; /* mcode_alloc_at call sites, APK 0.1.30 */
+  return off == 0xa0074 || off == 0xa0138; /* mcode_alloc_at call sites, APK 0.1.31 */
 }
 static void *b_mmap(void *a, size_t l, int pr, int fl, int fd, off_t o) {
   if (lua_mcode_caller(__builtin_return_address(0)) && so_jit_mode() == 2) {
@@ -442,7 +444,7 @@ static sym g_syms[] = {
   S("__vsprintf_chk", b_vsprintf_chk), S("__fread_chk", b_fread_chk), S("__fwrite_chk", b_fwrite_chk),
   S("__readlink_chk", b_readlink_chk), S("__FD_SET_chk", b_FD_SET_chk), S("__FD_ISSET_chk", b_FD_ISSET_chk),
   S("__open_2", b_open_2), S("__stack_chk_fail", b_stack_chk_fail), S("__stack_chk_guard", &bionic_stack_guard),
-  S("open", b_open), S("openat", b_openat), S("stat", b_stat), S("lstat", b_lstat), S("fstat", b_fstat),
+  S("open", b_open), S("openat", b_openat), S("renameat", b_renameat), S("stat", b_stat), S("lstat", b_lstat), S("fstat", b_fstat),
   S("readdir", b_readdir), S("scandir", b_scandir), S("alphasort", b_alphasort), S("fnmatch", b_fnmatch), S("getrusage", b_getrusage), S("statfs64", b_statfs64), S("statfs", b_statfs64), S("opendir", b_opendir), S("fopen", b_fopen), S("access", b_access), S("mkdir", b_mkdir),
   S("__system_property_get", b_system_property_get), S("__android_log_write", b_log_write),
   S("__android_log_print", b_log_print), S("__android_log_vprint", b_log_vprint), S("__assert2", b_assert2),

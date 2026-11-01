@@ -176,11 +176,11 @@ static void *lua_real(const char *n) { so_module *m = so_find("liblua_shared.so"
 static void lua_patch_once(void) {
   static int done; if (done) return; done = 1;
   so_module *m = so_find("liblua_shared.so"); if (!m) { fprintf(stderr, "[lua] patch: module not found\n"); return; }
-  uint64_t *c = (uint64_t *)(m->base + 0x26cde0); uintptr_t pg = (uintptr_t)c & ~(uintptr_t)16383;
+  uint64_t *c = (uint64_t *)(m->base + 0x26d468); uintptr_t pg = (uintptr_t)c & ~(uintptr_t)16383;
   int r = mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE);
   fprintf(stderr, "[lua] ctr cache was %llx (mprotect %d)\n", (unsigned long long)*c, r); *c = 0x8444c004ULL;
   so_module *cl = so_find("libclient.so");
-  if (cl) { uint32_t *ins = (uint32_t *)(cl->base + 0x968d7c); uintptr_t p2 = (uintptr_t)ins & ~(uintptr_t)16383;
+  if (cl) { uint32_t *ins = (uint32_t *)(cl->base + 0x9b6d90); uintptr_t p2 = (uintptr_t)ins & ~(uintptr_t)16383;
     extern void *so_wptr(void *); extern int so_is_mirrored(void *);
     if (*ins == 0x36000360) { int a = 0, b = 0;
       if (so_is_mirrored(ins)) *(uint32_t *)so_wptr(ins) = 0x1400001b;
@@ -283,7 +283,7 @@ static void *watchdog(void *a) {
   off_t last = -1; int idle = 0, dumps = 0;
   for (;;) {
     sleep(1);
-    { static so_module *cl; static char last[200]; static int lg[6]; if(!cl) cl=so_find("libclient.so");
+    { static so_module *cl; static char last[200]; static int lg[6]; if(!cl && getenv("GMOD_NHALO_DIAG")) cl=so_find("libclient.so");
       if(cl){ const char *r=(const char*)(cl->base+0x13eb028); if(r[0]&&strncmp(r,last,191)){ strncpy(last,r,191); fprintf(stderr,"[nhalo] reason: %.191s\n",r); }
         int v[6]; v[0]=*(volatile int*)(cl->base+0x13f7f90); v[1]=*(volatile unsigned char*)(cl->base+0x13eb010); v[2]=*(volatile int*)(cl->base+0x13eb288);
         uint64_t q=*(volatile uint64_t*)(cl->base+0x13eafb0); v[3]=q!=0; const uint64_t*vv=(const uint64_t*)(cl->base+0x13f7d10); v[4]=vv[0]!=vv[1];
@@ -364,15 +364,15 @@ int main(int argc, char **argv) {
     return 1; }
   fprintf(stderr, "loaded, unresolved=%d\n", u);
   bionic_thread_enter();
-  { /* liblua's own internal PLT calls bypass the resolver: patch its GOT slots (APK 0.1.30 offsets) */
+  { /* liblua's own internal PLT calls bypass the resolver: patch its GOT slots (APK 0.1.31 offsets) */
     so_module *m = so_find("liblua_shared.so");
     if (m) {
-      /* __clear_cache reads CTR_EL0 (mrs) unless cached at .bss+0x26cde0; mrs ctr_el0 traps on iOS -> pre-fill */
-      { uint64_t *c = (uint64_t *)(m->base + 0x26cde0); uintptr_t pg = (uintptr_t)c & ~(uintptr_t)16383;
+      /* __clear_cache reads CTR_EL0 (mrs) unless cached at .bss+0x26d468; mrs ctr_el0 traps on iOS -> pre-fill */
+      { uint64_t *c = (uint64_t *)(m->base + 0x26d468); uintptr_t pg = (uintptr_t)c & ~(uintptr_t)16383;
         mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE);
         fprintf(stderr, "[lua] ctr cache was %llx\n", (unsigned long long)*c); *c = 0x8444c004ULL; }
       struct { size_t off; const char *n; void *hook; } g[] = {
-        {0x253e28, "luaL_newstate", (void *)my_luaL_newstate}, {0x253b20, "lua_newstate", (void *)my_lua_newstate}};
+        {0x254488, "luaL_newstate", (void *)my_luaL_newstate}, {0x254180, "lua_newstate", (void *)my_lua_newstate}};
       for (int i = 0; i < 2; i++) {
         void **slot = (void **)(m->base + g[i].off); void *real = so_sym(m, g[i].n);
         uintptr_t pg = (uintptr_t)slot & ~(uintptr_t)16383;
