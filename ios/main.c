@@ -182,8 +182,8 @@ int main(int argc, char **argv) {
     }
   }
   setenv("APP_LIB_PATH", lib, 1);
-  setenv("APP_DATA_PATH", ur, 1);
-  setenv("VALVE_GAME_PATH", ur, 1);
+  setenv("APP_DATA_PATH", g_docs, 1);
+  setenv("VALVE_GAME_PATH", g_docs, 1);
   setenv("SOURCEVR_SHARED_CONTENT_PATH", g_docs, 1);
   setenv("SOURCEVR_WRITE_GAME_PATH", wr, 1);
   setenv("SOURCEVR_GAME", "garrysmod", 1); setenv("SOURCE_GAME", "garrysmod", 1); setenv("EXTRAS_VPK_PATH", rt, 1); setenv("APP_MOD_LIB", lib, 1); setenv("LANG", "en_US.UTF-8", 1);
