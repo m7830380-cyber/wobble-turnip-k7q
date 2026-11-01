@@ -99,10 +99,11 @@ static int halofill_pre(int c,float*sv,int*loc){ if(c!=6) return 0; if(!r_giv) r
  static int(*gul)(unsigned,const char*); static void(*guf)(unsigned,int,float*); static void(*u1f)(int,float); if(!gul){gul=gl_proc("glGetUniformLocation");guf=gl_proc("glGetUniformfv");u1f=gl_proc("glUniform1f");}
  int l=gul(pr,"flSRGBWrite"); if(l<0) return 0; guf(pr,l,sv); if(*sv==0.0f) return 0; u1f(l,0.0f); *loc=l; if(g_hfix++<3) fprintf(stderr,"[halo] composite prog %d srgbwrite %.1f -> 0\n",pr,*sv); return 1; }
 static void halofill_post(int l,float v){ static void(*u1f)(int,float); if(!u1f) u1f=gl_proc("glUniform1f"); u1f(l,v); }
-static int g_pcl; static void blurlog(int c){ if(c!=6||g_pcl>=80) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int vp[4],tx=0,pr=0,st=0,bs=0,bd=0,bl=0,fb=0,eq=0,bsa=0,bda=0; r_giv(0x0BA2,vp); r_giv(0x8069,&tx); r_giv(0x8B8D,&pr); r_giv(0x0B90,&st); r_giv(0x0BE2,&bl); r_giv(0x80C9,&bs); r_giv(0x80C8,&bd); r_giv(0x80CB,&bsa); r_giv(0x80CA,&bda); r_giv(0x8009,&eq); r_giv(0x8CA6,&fb); if(!pr||tx<=0||tx>=65536) return; int blur=vp[2]<1000&&vp[2]>64&&!st; int comp=st&&bl&&bs==1&&bd==1; if(!blur&&!comp) return;
+static void (*r_shsrc)(unsigned,int,const char*const*,const int*); static unsigned char g_blsh[65536],g_blpr[65536];
+static int g_pcl; static void blurlog(int c){ if(c!=6||g_pcl>=80) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int vp[4],tx=0,pr=0,st=0,bs=0,bd=0,bl=0,fb=0,eq=0,bsa=0,bda=0; r_giv(0x0BA2,vp); r_giv(0x8069,&tx); r_giv(0x8B8D,&pr); r_giv(0x0B90,&st); r_giv(0x0BE2,&bl); r_giv(0x80C9,&bs); r_giv(0x80C8,&bd); r_giv(0x80CB,&bsa); r_giv(0x80CA,&bda); r_giv(0x8009,&eq); r_giv(0x8CA6,&fb); if(!pr||tx<=0||tx>=65536) return; int blur=pr<65536&&g_blpr[pr]; int comp=st&&bl&&bs==1&&bd==1; if(!blur&&!comp) return;
  static int(*gul)(unsigned,const char*); static void(*guf)(unsigned,int,float*); static void(*gtp)(unsigned,unsigned,int*); if(!gul){gul=gl_proc("glGetUniformLocation");guf=gl_proc("glGetUniformfv");gtp=gl_proc("glGetTexParameteriv");}
  int mn=0,mg=0,ws=0; gtp(0x0DE1,0x2801,&mn); gtp(0x0DE1,0x2800,&mg); gtp(0x0DE1,0x2802,&ws);
- g_pcl++; fprintf(stderr,"[blur2] %s prog %d fb %d vp %d,%d %dx%d tex %d %dx%d filt %x/%x wrap %x blend %d %x %x a %x %x eq %x",comp?"COMP":"BLUR",pr,fb,vp[0],vp[1],vp[2],vp[3],tx,g_tw[tx],g_th[tx],mn,mg,ws,bl,bs,bd,bsa,bda,eq);
+ g_pcl++; fprintf(stderr,"[blur3] %s prog %d fb %d vp %d,%d %dx%d tex %d %dx%d filt %x/%x wrap %x blend %d %x %x a %x %x eq %x",comp?"COMP":"BLUR",pr,fb,vp[0],vp[1],vp[2],vp[3],tx,g_tw[tx],g_th[tx],mn,mg,ws,bl,bs,bd,bsa,bda,eq);
  for(int k=0;k<4;k++){ char nm[16]; snprintf(nm,sizeof nm,"pc[%d]",k); int l=gul(pr,nm); if(l<0) break; float v[4]={0}; guf(pr,l,v); fprintf(stderr," pc%d(%g %g %g %g)",k,v[0],v[1],v[2],v[3]); }
  int l=gul(pr,"flSRGBWrite"); if(l>=0){ float v=0; guf(pr,l,&v); fprintf(stderr," srgbw %g",v);} fprintf(stderr,"\n"); }
 static void w_debv(unsigned m,int c,unsigned t,const void*i,int bv){dinfo("dEBV",c);blurlog(c);halochk(c);float sv=0;int hl=-1;int hf=halofill_pre(c,&sv,&hl);int bm=bloomchk(c);r_debv(m,c,t,i,bv);if(hf)halofill_post(hl,sv);halopost(c);if(bm){int fb=0;r_giv(0x8CA6,&fb);dumpfb(fb,2796,1290,"bloom_post");}}
@@ -126,13 +127,14 @@ static void (*r_vap)(unsigned,int,unsigned,unsigned char,int,const void*); stati
 static void (*r_scov)(float,unsigned char); static void w_scov(float v,unsigned x){ r_scov(v,x&0xFF); }
 #define UM(N) static void (*r_##N)(int,int,unsigned char,const float*); static void w_##N(int l,int c,unsigned t,const float*v){ r_##N(l,c,t&0xFF,v); }
 UM(um2) UM(um3) UM(um4) UM(um23) UM(um32) UM(um24) UM(um42) UM(um34) UM(um43)
-static void (*r_shsrc)(unsigned,int,const char*const*,const int*); static FILE*g_shf; static int g_shn;
+static FILE*g_shf; static int g_shn;
 static void w_shsrc(unsigned sh,int n,const char*const*str,const int*len){
   if(!g_shf){ char pth[1024]; snprintf(pth,sizeof pth,"%s/Documents/gmod_shaders.txt",getenv("HOME")); g_shf=fopen(pth,"w"); }
   if(g_shf && g_shn<4000){ g_shn++; fprintf(g_shf,"\n===== SHADER %u =====\n",sh); for(int i=0;i<n;i++){ if(len&&len[i]>=0) fwrite(str[i],1,len[i],g_shf); else fputs(str[i],g_shf);} fflush(g_shf); }
+  for(int i=0;i<n&&sh<65536;i++) if(str[i]&&strstr(str[i],"gmodvr_blur_ps")) g_blsh[sh]=1;
   r_shsrc(sh,n,str,len); }
 static void (*r_attsh)(unsigned,unsigned);
-static void w_attsh(unsigned p,unsigned sh){ if(g_shf){ fprintf(g_shf,"\n##### ATTACH prog %u shader %u\n",p,sh); fflush(g_shf);} r_attsh(p,sh); }
+static void w_attsh(unsigned p,unsigned sh){ if(p<65536&&sh<65536&&g_blsh[sh]) g_blpr[p]=1; if(g_shf){ fprintf(g_shf,"\n##### ATTACH prog %u shader %u\n",p,sh); fflush(g_shf);} r_attsh(p,sh); }
 
 static void *my_eglGetProcAddress(const char *n) { return ios_gl_proc(n); }
 void *ios_gl_proc(const char *n) {
