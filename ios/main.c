@@ -35,12 +35,27 @@ static void fix_blit(int a,int b,int c,int d,int e,int f,int g,int h,unsigned ma
   if (filt != 0x2600 && filt != 0x2601) filt = (filt == 2) ? 0x2601 : 0x2600; /* D3DTEXF: 1=POINT 2=LINEAR */
   if (mask & 0x500) filt = 0x2600;
   if (o != filt && n++ < 10) fprintf(stderr, "BLITFIX filter 0x%x -> 0x%x mask 0x%x %dx%d->%dx%d\n", o, filt, mask, c-a, d-b, g-e, h-f);
+  if (g_sdiag < 0) g_sdiag = 0;
+  SD("blit %dx%d->%dx%d", c-a, d-b, g-e, h-f);
   real_blit(a,b,c,d,e,f,g,h,mask,filt);
 }
 void *ios_gl_proc(const char *n);
+static int g_sdiag = -1; /* starts after first blit */
+#define SD(fmt, ...) do { if (g_sdiag >= 0 && g_sdiag < 120) { g_sdiag++; fprintf(stderr, "STDIAG " fmt "\n", __VA_ARGS__); } } while (0)
+static void (*r_enable)(unsigned), (*r_disable)(unsigned), (*r_sfunc)(unsigned,int,unsigned), (*r_sop)(unsigned,unsigned,unsigned), (*r_smask)(unsigned), (*r_clear)(unsigned), (*r_cmask)(unsigned char,unsigned char,unsigned char,unsigned char);
+static void w_enable(unsigned c) { if (c == 0xB90) SD("enable stencil%s", ""); r_enable(c); }
+static void w_disable(unsigned c) { if (c == 0xB90) SD("disable stencil%s", ""); r_disable(c); }
+static void w_sfunc(unsigned f, int r, unsigned m) { SD("func 0x%x ref %d mask 0x%x", f, r, m); r_sfunc(f, r, m); }
+static void w_sop(unsigned a, unsigned b, unsigned c) { SD("op 0x%x 0x%x 0x%x", a, b, c); r_sop(a, b, c); }
+static void w_smask(unsigned m) { SD("wmask 0x%x", m); r_smask(m); }
+static void w_clear(unsigned m) { SD("clear 0x%x", m); r_clear(m); }
+static void w_cmask(unsigned char a, unsigned char b, unsigned char c, unsigned char d) { SD("cmask %d%d%d%d", a, b, c, d); r_cmask(a, b, c, d); }
 static void *my_eglGetProcAddress(const char *n) { return ios_gl_proc(n); }
 void *ios_gl_proc(const char *n) {
   if (!strcmp(n, "eglGetProcAddress")) return (void*)my_eglGetProcAddress;
+#define W(nm, r, w) if (!strcmp(n, nm)) { if (!r) r = gl_proc(nm); return r ? (void*)w : NULL; }
+  W("glEnable", r_enable, w_enable) W("glDisable", r_disable, w_disable) W("glStencilFunc", r_sfunc, w_sfunc)
+  W("glStencilOp", r_sop, w_sop) W("glStencilMask", r_smask, w_smask) W("glClear", r_clear, w_clear) W("glColorMask", r_cmask, w_cmask)
   if (!strcmp(n, "glBlitFramebuffer") || !strcmp(n, "glBlitFramebufferANGLE") || !strcmp(n, "glBlitFramebufferEXT")) {
     if (!real_blit) real_blit = gl_proc("glBlitFramebuffer");
     return real_blit ? (void*)fix_blit : NULL;
