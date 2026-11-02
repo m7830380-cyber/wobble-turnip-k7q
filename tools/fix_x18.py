@@ -54,7 +54,7 @@ def analyse(insns):
             tk = idx.get(t) if t is not None else None
             if mn == 'b':
                 if tk is not None: succ = [tk]
-                else: over = 0xFF  # tail call
+                else: over = 0xFF | (1 << 30)  # tail call
             else:
                 if tk is not None: succ.append(tk)
                 else: over = ALL
@@ -62,7 +62,7 @@ def analyse(insns):
         elif mn in ('br', 'braa', 'brab', 'braaz', 'brabz'):
             over = ALL; u |= refs
         elif mn.startswith('ret') or mn in ('eret',):
-            over = 0x3
+            over = 0x3 | (1 << 30); u |= 1 << 30
         elif mn in ('brk', 'udf', 'hlt'):
             over = 0
         else:
@@ -112,7 +112,7 @@ def fix(path):
             busy = 0  # registers live or referenced wherever x18 is live/referenced
             for k in range(len(insns)):
                 if (refs[k] | lout[k] | lin[k]) >> 18 & 1: busy |= refs[k] | lout[k] | lin[k] | info[k][1]  # incl. defs (e.g. calls clobbering caller-saved regs)
-            new = next((c for c in CANDS if not busy >> c & 1), None)
+            new = next((c for c in CANDS + [30] if not busy >> c & 1), None)
             if new is None: bad += 1; print(f'  {path}: no free reg in {start:#x}'); continue
             live += 1
         nfun += 1
