@@ -136,7 +136,7 @@ static NSMutableArray<NSString *> *g_args;
   [self toggle:c text:@"Auto exposure (HDR)" key:@"autoexposure" def:YES];
   [self toggle:c text:@"Physgun halo (if shit happens)" key:@"physgun_halo" def:YES];
   [self toggle:c text:@"Simplified physgun glow (dont turn on unless issues)" key:@"fast_halo" def:NO];
-  [self toggle:c text:@"sRGB fix (leave off unless HDR)" key:@"srgb_fix4" def:NO];
+  [self toggle:c text:@"sRGB fix (leave off unless HDR is off)" key:@"srgb_fix4" def:NO];
 
   // Controls
   c = (UIStackView *)[self card:@"CONTROLS"];
