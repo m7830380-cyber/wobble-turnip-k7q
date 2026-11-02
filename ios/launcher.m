@@ -143,9 +143,9 @@ static NSMutableArray<NSString *> *g_args;
   [self toggle:c text:@"Touch controls" key:@"touch" def:YES];
   [self toggle:c text:@"Show joystick" key:@"touch_show_joystick" def:YES];
   [self toggle:c text:@"Tap to toggle sprint" key:@"touch_sprint_toggle" def:NO];
-  { UIButton *cl = [self button:@"Control layout — move, resize, recolor buttons" action:@selector(openLayout)];
+  { UIButton *cl = [self button:@"Control layout" action:@selector(openLayout)];
     cl.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; cl.layer.cornerRadius = 10; [cl.heightAnchor constraintEqualToConstant:40].active = YES; [c addArrangedSubview:cl];
-    UIButton *cb = [self button:@"Custom buttons — keys / commands for addons" action:@selector(openCustomButtons)];
+    UIButton *cb = [self button:@"Custom buttons keys o algo / commands and etc" action:@selector(openCustomButtons)];
     cb.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; cb.layer.cornerRadius = 10; [cb.heightAnchor constraintEqualToConstant:40].active = YES; [c addArrangedSubview:cb]; }
   [self slider:c text:@"Touch opacity" key:@"touch_opacity" min:0 max:100 def:60 step:5 fmt:@"%@: %.0f%%"];
   [self toggle:c text:@"Invert look" key:@"invert" def:NO];
