@@ -135,6 +135,7 @@ static int *b_errno(void) { return &errno; }
 uint8_t b_sF[3 * BIONIC_FILE_SZ];
 static FILE *xf(FILE *f) {
   uint8_t *p = (uint8_t *)f;
+  if (!p) return stderr; /* e.g. qhull in vphysics prints errors to a NULL qh ferr */
   if (p == b_sF) return stdin;
   if (p == b_sF + BIONIC_FILE_SZ) return stdout;
   if (p == b_sF + 2 * BIONIC_FILE_SZ) return stderr;
