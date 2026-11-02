@@ -68,7 +68,7 @@ static NSArray<NSString *> *tltokens(NSString *s) {
   for (NSString *ln in rows) {
     NSArray *t = tltokens(ln); TLButton *b = nil;
     if (t.count && [t[0] isEqual:@"touch_addbutton"]) {
-      if (t.count < 8 || ![t[1] length]) { if (err) *err = @"Invalid touch button in the saved layout."; return nil; }
+      if (t.count < 8 || ![t[1] length]) { if (err) *err = @"Broken layout file (bad button)"; return nil; }
       b = [TLButton new]; b.name = t[1]; b.texture = t[2]; b.command = t[3];
       float x1 = [t[4] floatValue], y1 = [t[5] floatValue], x2 = [t[6] floatValue], y2 = [t[7] floatValue];
       if (x2 <= x1 || y2 <= y1) { if (err) *err = [NSString stringWithFormat:@"Invalid bounds for %@.", b.name]; return nil; }
@@ -77,12 +77,12 @@ static NSArray<NSString *> *tltokens(NSString *s) {
       float asp = t.count >= 14 ? [t[13] floatValue] : 1; if (asp <= 0) asp = 1;
       if (!b.isZone) y2 = y1 + (x2 - x1) * aspect * asp;
       [L rect:b x:x1 y:y1 w:x2 - x1 h:y2 - y1];
-      if ([L find:b.name]) { if (err) *err = [NSString stringWithFormat:@"Duplicate touch button %@.", b.name]; return nil; }
+      if ([L find:b.name]) { if (err) *err = [NSString stringWithFormat:@"%@ is in there twice", b.name]; return nil; }
       [L.buttons addObject:b];
     }
     [L.lines addObject:b ?: ln];
   }
-  if (!L.buttons.count) { if (err) *err = @"The saved layout has no touch controls."; return nil; }
+  if (!L.buttons.count) { if (err) *err = @"Layout file is empty"; return nil; }
   [L migrateMore];
   return L;
 }
@@ -220,10 +220,10 @@ static NSString *cb_command(CBEntry *e) {
 }
 NSString *cb_command_error(NSString *s) {
   NSString *t = [s ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
-  if (!cb_parts(t).count) return @"Type a console command.";
+  if (!cb_parts(t).count) return @"Type a command";
   if ([t containsString:@"\""]) return @"Quotation marks (\") can't be used in a button's command.";
-  if ([t rangeOfCharacterFromSet:NSCharacterSet.newlineCharacterSet].location != NSNotFound) return @"Use a single line.";
-  if ([t lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 255) return @"Use at most 255 characters.";
+  if ([t rangeOfCharacterFromSet:NSCharacterSet.newlineCharacterSet].location != NSNotFound) return @"One line only";
+  if ([t lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 255) return @"Too long (255 max)";
   return nil;
 }
 
@@ -277,7 +277,7 @@ NSString *cb_validate(CBEntry *e) {
   if (e.slot < 0) return @"Bad slot.";
   NSString *l = [e.label ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
   if (!l.length) l = cb_default_label(e);
-  if (cpcount(l) > 4) return @"Use a label of 1 to 4 characters.";
+  if (cpcount(l) > 4) return @"Label has to be 1-4 letters";
   e.label = l;
   if (![@[@"circle", @"square", @"sharp"] containsObject:e.shape ?: @""]) e.shape = @"circle";
   if (![e.mode isEqual:@"toggle"]) e.mode = @"hold";
@@ -674,11 +674,11 @@ void cb_present(UIViewController *from, void (^done)(void));
 }
 - (void)buildInspector {
   self.picker = [self btn:@"" sel:nil]; self.picker.showsMenuAsPrimaryAction = YES; [self.insp addArrangedSubview:self.picker];
-  self.rmBtn = [self btn:@"Remove from screen" sel:@selector(toggleRemove)]; [self.insp addArrangedSubview:self.rmBtn];
+  self.rmBtn = [self btn:@"Hide it" sel:@selector(toggleRemove)]; [self.insp addArrangedSubview:self.rmBtn];
   self.colorBtn = [self btn:@"Color…" sel:@selector(pickColor)]; [self.insp addArrangedSubview:self.colorBtn];
   [self.insp addArrangedSubview:[self btn:@"Apply color to all buttons" sel:@selector(colorAll)]];
-  self.imgBtn = [self btn:@"Choose icon image…" sel:@selector(chooseImage)]; self.restoreBtn = [self btn:@"Restore preset icon" sel:@selector(restoreImage)];
-  self.closeImgBtn = [self btn:@"Choose X icon image…" sel:@selector(chooseCloseImage)]; self.closeRestoreBtn = [self btn:@"Restore preset X icon" sel:@selector(restoreCloseImage)];
+  self.imgBtn = [self btn:@"Custom icon" sel:@selector(chooseImage)]; self.restoreBtn = [self btn:@"Default icon" sel:@selector(restoreImage)];
+  self.closeImgBtn = [self btn:@"Custom X icon" sel:@selector(chooseCloseImage)]; self.closeRestoreBtn = [self btn:@"Default X icon" sel:@selector(restoreCloseImage)];
   for (UIView *v in @[self.imgBtn, self.restoreBtn, self.closeImgBtn, self.closeRestoreBtn]) [self.insp addArrangedSubview:v];
   NSMutableArray *sl = [NSMutableArray new], *ll = [NSMutableArray new];
   for (int i = 0; i < 4; i++) {
@@ -688,7 +688,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   }
   self.sliders = sl; self.sliderLabels = ll;
   self.visSw = [self sw:@"Show button" sel:@selector(visChanged:)];
-  self.moreSw = [self sw:@"In the ⋯ menu" sel:@selector(moreChanged:)];
+  self.moreSw = [self sw:@"Inside the ... menu" sel:@selector(moreChanged:)];
   [self.insp addArrangedSubview:[self lab:@"Tap ... to open or close the menu. Drop a button on ... to add it or drag one out of the open menu to take it out of the menu o algo" size:11]];
   self.snapSw = [self sw:@"Snap to grid" sel:@selector(snapChanged:)]; self.snapSw.on = self.layout.snap;
   [self sw:@"Show move / look zones" sel:@selector(zonesChanged:)];
@@ -719,12 +719,12 @@ void cb_present(UIViewController *from, void (^done)(void));
   float v[4] = {b.x1, b.y1, b.w, b.h}; NSArray *n = @[@"X", @"Y", @"Width", @"Height"];
   for (int i = 0; i < 4; i++) { self.sliders[i].value = v[i]; self.sliders[i].enabled = !b.inMore;
     self.sliderLabels[i].text = [NSString stringWithFormat:@"%@: %.1f%%", n[i], v[i] * 100]; }
-  [self.rmBtn setTitle:b.hidden ? @"Put back on screen" : @"Remove from screen" forState:0];
+  [self.rmBtn setTitle:b.hidden ? @"Bring it back" : @"Hide it" forState:0];
   self.rmBtn.tintColor = b.hidden ? UIColor.systemGreenColor : UIColor.systemRedColor;
   self.visSw.on = !b.hidden; self.moreSw.on = b.inMore; self.moreSw.enabled = b.canBeInMore;
   self.colorBtn.tintColor = ([b.command isEqual:@"_move"] && !(b.flags & 4096)) ? [UIColor colorWithRed:0xaa / 255.0 green:0 blue:0 alpha:1] : b.color;
-  self.imgBtn.enabled = !b.isZone; [self.imgBtn setTitle:b.moreButton ? @"Choose ⋯ icon image…" : @"Choose icon image…" forState:0];
-  [self.restoreBtn setTitle:b.moreButton ? @"Restore preset ⋯ icon" : @"Restore preset icon" forState:0];
+  self.imgBtn.enabled = !b.isZone; [self.imgBtn setTitle:b.moreButton ? @"Custom ... icon" : @"Custom icon" forState:0];
+  [self.restoreBtn setTitle:b.moreButton ? @"Default ... icon" : @"Default icon" forState:0];
   TLButton *stock = [[TLLayout parse:self.defaults aspect:self.layout.screenAspect error:nil] find:b.name];
   self.restoreBtn.enabled = !b.isZone && (ce ? ce.imageEncoded != nil : (stock && ![b.texture isEqual:stock.texture]));
   self.closeImgBtn.hidden = self.closeRestoreBtn.hidden = !b.moreButton;
@@ -791,7 +791,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   [self reloadArt]; [self edited];
 }
 - (void)reset {
-  UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Reset control layout?" message:@"Restore the standard button positions, sizes, colors and icons. Your custom buttons stay. Tap Save to apply." preferredStyle:1];
+  UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Reset everything?" message:@"Buttons go back to default spots, sizes and colors. Your custom buttons stay. Hit Save to apply." preferredStyle:1];
   [a addAction:[UIAlertAction actionWithTitle:@"Reset" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *x) {
     TLLayout *d = [TLLayout parse:self.defaults aspect:self.layout.screenAspect error:nil]; if (!d) return;
     self.layout.moreCloseTexture = d.moreCloseTexture;
@@ -804,13 +804,13 @@ void cb_present(UIViewController *from, void (^done)(void));
   [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; [self presentViewController:a animated:YES completion:nil];
 }
 - (void)save {
-  if ([self text:self.file].length != self.original.length || ![[self text:self.file] isEqual:self.original]) { [self error:@"The layout changed while this editor was open. Reopen it to load the latest controls."]; return; }
+  if ([self text:self.file].length != self.original.length || ![[self text:self.file] isEqual:self.original]) { [self error:@"Layout changed somewhere else, reopen this o algo"]; return; }
   NSMutableSet *used = [NSMutableSet setWithObject:self.layout.moreCloseTexture]; for (TLButton *b in self.layout.buttons) [used addObject:b.texture];
   for (NSString *n in self.uploaded) if ([used containsObject:n]) {
     atomic_write([self.user stringByAppendingFormat:@"/materials/%@.vtf", n], vtf_rgba8888(self.uploaded[n]));
     atomic_write([self.user stringByAppendingFormat:@"/materials/%@.vmt", n], [touch_vmt(n) dataUsingEncoding:NSUTF8StringEncoding]); }
   if (self.customChanged) atomic_write(cb_json_path(), cb_to_json(self.custom));
-  if (!atomic_write(self.file, [[self.layout cfg:self.profile] dataUsingEncoding:NSUTF8StringEncoding])) { [self error:@"Could not write the layout."]; return; }
+  if (!atomic_write(self.file, [[self.layout cfg:self.profile] dataUsingEncoding:NSUTF8StringEncoding])) { [self error:@"Couldn't save, idk why"]; return; }
   cb_install(self.user);
   self.changed = NO; [self close:YES];
 }
@@ -841,12 +841,12 @@ void cb_present(UIViewController *from, void (^done)(void));
 }
 - (void)documentPicker:(UIDocumentPickerViewController *)c didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
   NSData *d = [NSData dataWithContentsOfURL:urls.firstObject]; if (!d) return;
-  NSString *s = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding]; if (!s) { [self error:@"This file is not text."]; return; }
+  NSString *s = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding]; if (!s) { [self error:@"That's not a layout file"]; return; }
   if ([s hasPrefix:@"\ufeff"]) s = [s substringFromIndex:1];
   NSString *layoutText = s; NSMutableArray *custom = nil; NSDictionary *imgs = nil;
   if ([[s stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] hasPrefix:@"{"]) {
     NSDictionary *j = [NSJSONSerialization JSONObjectWithData:d options:0 error:nil];
-    if (![j isKindOfClass:NSDictionary.class] || ![j[@"format"] isEqual:@"gmodvr-control-layout"]) { [self error:@"This file is not a supported control layout export."]; return; }
+    if (![j isKindOfClass:NSDictionary.class] || ![j[@"format"] isEqual:@"gmodvr-control-layout"]) { [self error:@"That's not a layout file"]; return; }
     layoutText = j[@"layout"]; imgs = j[@"images"];
     custom = cb_from_json([NSJSONSerialization dataWithJSONObject:j[@"customButtons"] ?: @{} options:0 error:nil]);
   }
@@ -860,7 +860,7 @@ void cb_present(UIViewController *from, void (^done)(void));
 }
 - (void)openCustom {
   
-  if (self.changed) { [self error:@"Save or cancel your layout changes first."]; return; }
+  if (self.changed) { [self error:@"Save or cancel first"]; return; }
   __weak TLEditor *ws = self;
   cb_present(self, ^{ ws.custom = cb_from_json([NSData dataWithContentsOfFile:cb_json_path()]); [ws.icons removeAllObjects]; [ws mergeCustom]; [ws reloadArt]; [ws rebuildPicker]; [ws select:ws.selected]; });
 }
@@ -895,7 +895,7 @@ void touch_editor_present(UIViewController *from, NSString *user, BOOL inGame, v
 }
 - (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
   UITableViewCell *c = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
-  if (!self.entries.count) { c.textLabel.text = @"No custom buttons. The game shows only the standard controls."; c.textLabel.numberOfLines = 0; c.textLabel.textColor = UIColor.secondaryLabelColor; return c; }
+  if (!self.entries.count) { c.textLabel.text = @"No custom buttons yet"; c.textLabel.numberOfLines = 0; c.textLabel.textColor = UIColor.secondaryLabelColor; return c; }
   CBEntry *e = self.entries[ip.row];
   c.imageView.image = [UIImage imageWithCGImage:image_from_rgba(cb_rgba(e)).CGImage scale:256 / 40.0 orientation:UIImageOrientationUp];
   c.textLabel.text = e.label;
@@ -950,7 +950,7 @@ void touch_editor_present(UIViewController *from, NSString *user, BOOL inGame, v
     collect();
     if (e.isCommand && [e.mode isEqual:@"toggle"] && !cb_can_toggle(e.consoleCommand)) e.mode = @"hold";
     NSString *err = cb_validate(e);
-    if (err) { UIAlertController *m = [UIAlertController alertControllerWithTitle:@"Could not save" message:err preferredStyle:1];
+    if (err) { UIAlertController *m = [UIAlertController alertControllerWithTitle:@"Couldn't save, idk why" message:err preferredStyle:1];
       [m addAction:[UIAlertAction actionWithTitle:@"OK" style:0 handler:^(UIAlertAction *y) { [self edit2:e orig:orig]; }]]; [self presentViewController:m animated:YES completion:nil]; return; }
     NSUInteger i = [self.entries indexOfObject:orig]; if (i == NSNotFound) [self.entries addObject:e]; else self.entries[i] = e;
     [self persist]; }]];
@@ -959,8 +959,8 @@ void touch_editor_present(UIViewController *from, NSString *user, BOOL inGame, v
   [self presentViewController:a animated:YES completion:nil];
 }
 - (void)pickKey:(CBEntry *)e with:(BOOL)with then:(void (^)(void))then {
-  UIAlertController *g = [UIAlertController alertControllerWithTitle:with ? @"Together with (held first)" : @"The key is" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-  if (with) [g addAction:[UIAlertAction actionWithTitle:@"Nothing: just this key" style:0 handler:^(UIAlertAction *x) { e.with = nil; then(); }]];
+  UIAlertController *g = [UIAlertController alertControllerWithTitle:with ? @"Combo key (held first)" : @"The key is" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+  if (with) [g addAction:[UIAlertAction actionWithTitle:@"No combo" style:0 handler:^(UIAlertAction *x) { e.with = nil; then(); }]];
   NSMutableArray *groups = [NSMutableArray new]; for (NSArray *k in cb_keys()) if (![groups containsObject:k[2]]) [groups addObject:k[2]];
   for (NSString *gr in groups) [g addAction:[UIAlertAction actionWithTitle:gr style:0 handler:^(UIAlertAction *x) {
     UIAlertController *kk = [UIAlertController alertControllerWithTitle:gr message:nil preferredStyle:UIAlertControllerStyleActionSheet];

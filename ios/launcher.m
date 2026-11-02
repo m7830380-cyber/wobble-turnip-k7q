@@ -147,7 +147,7 @@ static NSMutableArray<NSString *> *g_args;
     UIButton *cb = [self button:@"Custom buttons keys o algo / commands and etc" action:@selector(openCustomButtons)];
     cb.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; cb.layer.cornerRadius = 10; [cb.heightAnchor constraintEqualToConstant:40].active = YES; [c addArrangedSubview:cb]; }
   [self slider:c text:@"Touch opacity" key:@"touch_opacity" min:0 max:100 def:60 step:5 fmt:@"%@: %.0f%%"];
-  [self toggle:c text:@"Invert look" key:@"invert" def:NO];
+  [self toggle:c text:@"Inverted camera (why tho)" key:@"invert" def:NO];
 
   // Gameplay
   c = (UIStackView *)[self card:@"GAMEPLAY"];
@@ -164,7 +164,7 @@ static NSMutableArray<NSString *> *g_args;
   def.textColor = [UIColor colorWithWhite:0.5 alpha:1]; [c addArrangedSubview:def];
   [c addArrangedSubview:[self button:@"Reset launch arguments" action:@selector(resetArgs)]];
   c = (UIStackView *)[self card:@"FILES"];
-  [c addArrangedSubview:[self button:@"Back up saves" action:@selector(backup)]];
+  [c addArrangedSubview:[self button:@"Backup saves" action:@selector(backup)]];
   [c addArrangedSubview:[self button:@"Share logs" action:@selector(shareLogs)]];
   [c addArrangedSubview:[self button:@"How to add game files" action:@selector(help)]];
 }
@@ -181,7 +181,7 @@ static NSMutableArray<NSString *> *g_args;
 
 - (void)refreshStart {
   BOOL map = [[D stringForKey:@"gmod_start_at"] isEqualToString:@"map"];
-  [self.startBtn setTitle:map ? @"Selected map" : @"Main menu" forState:0];
+  [self.startBtn setTitle:map ? @"That map" : @"Just the menu" forState:0];
   [self.mapBtn setTitle:[D stringForKey:@"gmod_map"] ?: @"gm_construct" forState:0];
   self.mapBtn.enabled = map; self.mapBtn.alpha = map ? 1 : 0.4;
 }
@@ -189,7 +189,7 @@ static NSMutableArray<NSString *> *g_args;
 - (void)pickStart {
   UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Start at" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
   for (NSString *s in @[@"menu", @"map"])
-    [a addAction:[UIAlertAction actionWithTitle:[s isEqualToString:@"map"] ? @"Selected map" : @"Main menu" style:0 handler:^(UIAlertAction *x) {
+    [a addAction:[UIAlertAction actionWithTitle:[s isEqualToString:@"map"] ? @"That map" : @"Just the menu" style:0 handler:^(UIAlertAction *x) {
       [D setObject:s forKey:@"gmod_start_at"]; [self refreshStart]; }]];
   [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
   a.popoverPresentationController.sourceView = self.startBtn;
@@ -287,8 +287,8 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
         if ([fm copyItemAtPath:p toPath:t error:nil]) [f addObject:d];
       }
     }
-  UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Back up saves"
-    message:f.count ? [NSString stringWithFormat:@"Copied to Files → GMod → %@", dst.lastPathComponent] : @"Nothing to back up yet." preferredStyle:1];
+  UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Backup saves"
+    message:f.count ? [NSString stringWithFormat:@"Copied to Files → GMod → %@", dst.lastPathComponent] : @"No saves yet, go play first" preferredStyle:1];
   [a addAction:[UIAlertAction actionWithTitle:@"OK" style:0 handler:nil]]; [self presentViewController:a animated:YES completion:nil];
 }
 - (void)mpTap:(UIButton *)b {
@@ -303,7 +303,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     for (NSString *base in @[[self writeRoot], [self.docs stringByAppendingPathComponent:@"garrysmod"]])
       for (NSString *f in [NSFileManager.defaultManager contentsOfDirectoryAtPath:[base stringByAppendingPathComponent:@"save"] error:nil])
         if ([f.pathExtension isEqual:@"sav"] && ![saves containsObject:f.stringByDeletingPathExtension]) [saves addObject:f.stringByDeletingPathExtension];
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Load a save" message:saves.count ? nil : @"No saves found." preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Load a save" message:saves.count ? nil : @"No saves here" preferredStyle:UIAlertControllerStyleActionSheet];
     for (NSString *sv in saves) [a addAction:[UIAlertAction actionWithTitle:sv style:0 handler:^(UIAlertAction *x) { [self launch:@"load" target:sv]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; a.popoverPresentationController.sourceView = b;
     [self presentViewController:a animated:YES completion:nil]; return;
@@ -373,7 +373,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     } else { [cur appendFormat:@"%C", ch]; have = YES; }
   }
   if (q) {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Launch arguments" message:@"Close the quotation mark." preferredStyle:1];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Launch arguments" message:@"You forgot a closing \"" preferredStyle:1];
     [a addAction:[UIAlertAction actionWithTitle:@"OK" style:0 handler:nil]];
     [self presentViewController:a animated:YES completion:nil]; return nil;
   }
