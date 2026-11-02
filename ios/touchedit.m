@@ -453,7 +453,7 @@ void cb_present(UIViewController *from, void (^done)(void));
 @property(nonatomic, strong) TLCanvas *canvas; @property(nonatomic, strong) UIStackView *insp;
 @property(nonatomic, strong) UIButton *picker, *colorBtn, *imgBtn, *restoreBtn, *closeImgBtn, *closeRestoreBtn;
 @property(nonatomic, strong) NSArray<UISlider *> *sliders; @property(nonatomic, strong) NSArray<UILabel *> *sliderLabels;
-@property(nonatomic, strong) UISwitch *visSw, *moreSw, *snapSw;
+@property(nonatomic, strong) UISwitch *visSw, *moreSw, *snapSw; @property(nonatomic, strong) UIButton *rmBtn;
 @property(nonatomic) BOOL updating, imageForClose; @property(nonatomic, copy) NSString *pendingExport;
 @property(nonatomic, copy) void (^onClose)(BOOL saved);
 - (void)select:(TLButton *)b; - (void)edited;
@@ -674,6 +674,7 @@ void cb_present(UIViewController *from, void (^done)(void));
 }
 - (void)buildInspector {
   self.picker = [self btn:@"" sel:nil]; self.picker.showsMenuAsPrimaryAction = YES; [self.insp addArrangedSubview:self.picker];
+  self.rmBtn = [self btn:@"Remove from screen" sel:@selector(toggleRemove)]; [self.insp addArrangedSubview:self.rmBtn];
   self.colorBtn = [self btn:@"Color…" sel:@selector(pickColor)]; [self.insp addArrangedSubview:self.colorBtn];
   [self.insp addArrangedSubview:[self btn:@"Apply color to all buttons" sel:@selector(colorAll)]];
   self.imgBtn = [self btn:@"Choose icon image…" sel:@selector(chooseImage)]; self.restoreBtn = [self btn:@"Restore preset icon" sel:@selector(restoreImage)];
@@ -691,7 +692,8 @@ void cb_present(UIViewController *from, void (^done)(void));
   [self.insp addArrangedSubview:[self lab:@"Tap ⋯ to open or close its menu. Drop a button on ⋯ to add it, or drag one out of the open menu to take it out." size:11]];
   self.snapSw = [self sw:@"Snap to grid" sel:@selector(snapChanged:)]; self.snapSw.on = self.layout.snap;
   [self sw:@"Show move / look zones" sel:@selector(zonesChanged:)];
-  [self sw:@"Show hidden buttons" sel:@selector(hiddenChanged:)];
+  [self sw:@"Show removed buttons" sel:@selector(hiddenChanged:)];
+  [self.insp addArrangedSubview:[self lab:@"Removed buttons stay in the list above (marked \"removed\") so you can put them back." size:11]];
   [self.insp addArrangedSubview:[self lab:[NSString stringWithFormat:@"Drag a control to move it, or onto ⋯ to put it in the ⋯ menu. Drag its corner to resize. %@",
     self.inGame ? @"Save, then the game reloads the controls." : @"Changes apply the next time the game starts."] size:11]];
   [self rebuildPicker];
@@ -700,7 +702,7 @@ void cb_present(UIViewController *from, void (^done)(void));
   NSMutableArray *acts = [NSMutableArray new];
   for (TLButton *b in self.layout.buttons) {
     CBEntry *ce = nil; for (CBEntry *e in self.custom) if ([e.buttonName isEqual:b.name]) ce = e;
-    NSString *t = ce ? [@"Custom: " stringByAppendingString:ce.label] : b.label; if (b.inMore) t = [t stringByAppendingString:@" (⋯ menu)"];
+    NSString *t = ce ? [@"Custom: " stringByAppendingString:ce.label] : b.label; if (b.inMore) t = [t stringByAppendingString:@" (⋯ menu)"]; if (b.hidden) t = [t stringByAppendingString:@" (removed)"];
     __weak TLEditor *ws = self;
     [acts addObject:[UIAction actionWithTitle:t image:nil identifier:nil handler:^(UIAction *a) { if (b.moreButton) ws.moreOpen = YES; [ws select:b]; }]];
   }
@@ -717,6 +719,8 @@ void cb_present(UIViewController *from, void (^done)(void));
   float v[4] = {b.x1, b.y1, b.w, b.h}; NSArray *n = @[@"X", @"Y", @"Width", @"Height"];
   for (int i = 0; i < 4; i++) { self.sliders[i].value = v[i]; self.sliders[i].enabled = !b.inMore;
     self.sliderLabels[i].text = [NSString stringWithFormat:@"%@: %.1f%%", n[i], v[i] * 100]; }
+  [self.rmBtn setTitle:b.hidden ? @"Put back on screen" : @"Remove from screen" forState:0];
+  self.rmBtn.tintColor = b.hidden ? UIColor.systemGreenColor : UIColor.systemRedColor;
   self.visSw.on = !b.hidden; self.moreSw.on = b.inMore; self.moreSw.enabled = b.canBeInMore;
   self.colorBtn.tintColor = ([b.command isEqual:@"_move"] && !(b.flags & 4096)) ? [UIColor colorWithRed:0xaa / 255.0 green:0 blue:0 alpha:1] : b.color;
   self.imgBtn.enabled = !b.isZone; [self.imgBtn setTitle:b.moreButton ? @"Choose ⋯ icon image…" : @"Choose icon image…" forState:0];
@@ -738,7 +742,8 @@ void cb_present(UIViewController *from, void (^done)(void));
   if (self.updating || !self.selected) return; TLButton *b = self.selected; float v = s.value;
   [self.layout rect:b x:s.tag == 0 ? v : b.x1 y:s.tag == 1 ? v : b.y1 w:s.tag == 2 ? v : b.w h:s.tag == 3 ? v : b.h]; [self edited];
 }
-- (void)visChanged:(UISwitch *)s { if (self.updating || !self.selected) return; self.selected.flags = s.on ? self.selected.flags & ~1 : self.selected.flags | 1; [self edited]; }
+- (void)toggleRemove { if (!self.selected) return; self.selected.flags ^= 1; [self rebuildPicker]; [self edited]; }
+- (void)visChanged:(UISwitch *)s { if (self.updating || !self.selected) return; self.selected.flags = s.on ? self.selected.flags & ~1 : self.selected.flags | 1; [self rebuildPicker]; [self edited]; }
 - (void)moreChanged:(UISwitch *)s { if (self.updating || !self.selected || ![self.layout setInMore:self.selected on:s.on]) return; [self reveal]; [self rebuildPicker]; [self edited]; }
 - (void)snapChanged:(UISwitch *)s { self.layout.snap = s.on; if (s.on) for (TLButton *b in self.layout.buttons) [self.layout rect:b x:b.x1 y:b.y1 w:b.w h:b.h]; [self edited]; }
 - (void)zonesChanged:(UISwitch *)s { self.showZones = s.on; [self.canvas setNeedsDisplay]; }
