@@ -689,13 +689,13 @@ void cb_present(UIViewController *from, void (^done)(void));
   self.sliders = sl; self.sliderLabels = ll;
   self.visSw = [self sw:@"Show button" sel:@selector(visChanged:)];
   self.moreSw = [self sw:@"In the ⋯ menu" sel:@selector(moreChanged:)];
-  [self.insp addArrangedSubview:[self lab:@"Tap ⋯ to open or close its menu. Drop a button on ⋯ to add it, or drag one out of the open menu to take it out." size:11]];
+  [self.insp addArrangedSubview:[self lab:@"Tap ... to open or close the menu. Drop a button on ... to add it or drag one out of the open menu to take it out of the menu o algo" size:11]];
   self.snapSw = [self sw:@"Snap to grid" sel:@selector(snapChanged:)]; self.snapSw.on = self.layout.snap;
   [self sw:@"Show move / look zones" sel:@selector(zonesChanged:)];
   [self sw:@"Show removed buttons" sel:@selector(hiddenChanged:)];
-  [self.insp addArrangedSubview:[self lab:@"Removed buttons stay in the list above (marked \"removed\") so you can put them back." size:11]];
-  [self.insp addArrangedSubview:[self lab:[NSString stringWithFormat:@"Drag a control to move it, or onto ⋯ to put it in the ⋯ menu. Drag its corner to resize. %@",
-    self.inGame ? @"Save, then the game reloads the controls." : @"Changes apply the next time the game starts."] size:11]];
+  [self.insp addArrangedSubview:[self lab:@"Removed buttons stay in this list (they marked \"removed\") so you can put them back if you did bad" size:11]];
+  [self.insp addArrangedSubview:[self lab:[NSString stringWithFormat:@"Drag a button to move it, or onto ... to put it in the burger menu. Drag its corner to resize. %@",
+    self.inGame ? @"Save, then the game reloads the controls o algo" : @"Changes apply the next time the game starts."] size:11]];
   [self rebuildPicker];
 }
 - (void)rebuildPicker {
@@ -891,7 +891,7 @@ void touch_editor_present(UIViewController *from, NSString *user, BOOL inGame, v
 - (void)persist { atomic_write(cb_json_path(), cb_to_json(self.entries)); [self.tableView reloadData]; }
 - (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return MAX(1, (NSInteger)self.entries.count); }
 - (NSString *)tableView:(UITableView *)t titleForFooterInSection:(NSInteger)s {
-  return @"Touch buttons that press a key or run a console command for addons (G, F, mouse 3, ...). Tap a button to change it, swipe to remove it. Changes apply the next time the game starts; move them in the Control layout editor.";
+  return @"Touch buttons that press a key or run a console command for addons swipe to remove it, press to edit Changes apply the next time the game starts, usable in the layout editor.";
 }
 - (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
   UITableViewCell *c = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
@@ -930,7 +930,7 @@ void touch_editor_present(UIViewController *from, NSString *user, BOOL inGame, v
   UIAlertController *a = [UIAlertController alertControllerWithTitle:isNew ? @"Add a button" : @"Change button" message:nil preferredStyle:1];
   if (e.isCommand) [a addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"Console command (separate with ;)"; f.text = e.consoleCommand;
     f.autocapitalizationType = UITextAutocapitalizationTypeNone; f.autocorrectionType = UITextAutocorrectionTypeNo; }];
-  [a addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"Label · 1 to 4 characters (blank = auto)"; f.text = e.label; }];
+  [a addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"1 to 4 characters (blank = auto)"; f.text = e.label; }];
   __weak UIAlertController *wa = a;
   void (^collect)(void) = ^{ NSArray *tf = wa.textFields; if (e.isCommand) { e.consoleCommand = [tf[0] text]; e.label = [tf[1] text]; } else e.label = [tf[0] text]; };
   if (!e.isCommand) {
