@@ -9,13 +9,20 @@
 #include <stdint.h>
 #include <pthread.h>
 
+#ifdef __APPLE__
+static int sig_to_host(int s) { switch (s) { case 7: return SIGBUS; case 10: return SIGUSR1; case 12: return SIGUSR2;
+  case 17: return SIGCHLD; case 18: return SIGCONT; case 19: return SIGSTOP; case 20: return SIGTSTP; case 23: return SIGURG; default: return s; } }
+#else
+static int sig_to_host(int s) { return s; }
+#endif
+typedef void (*bsh)(int);
 typedef unsigned long bsigset_t;
 // bionic LP64 (arm64): sa_flags comes FIRST (kernel layout), then handler, mask, restorer.
 struct bsigaction { int flags; void *handler; bsigset_t mask; void *restorer; };
 
 static void to_host(sigset_t *h, const bsigset_t *b) {
   sigemptyset(h); if (!b) return;
-  for (int s = 1; s < 64; s++) if (*b & (1UL << (s - 1))) sigaddset(h, s);
+  for (int s = 1; s < 64; s++) if (*b & (1UL << (s - 1))) { int hs = sig_to_host(s); if (hs > 0 && hs < NSIG) sigaddset(h, hs); }
 }
 static void to_bionic(bsigset_t *b, const sigset_t *h) {
   if (!b) return; *b = 0;
@@ -46,7 +53,8 @@ static int fl_to_b(int f) { return f; }
 int bs_sigaction(int sig, const struct bsigaction *a, struct bsigaction *o) {
   struct sigaction ha, ho; memset(&ha, 0, sizeof ha);
   if (a) { ha.sa_sigaction = (void (*)(int, siginfo_t *, void *))a->handler; to_host(&ha.sa_mask, &a->mask); ha.sa_flags = fl_to_host(a->flags); }
-  int r = sigaction(sig, a ? &ha : NULL, &ho);
+  int hs = sig_to_host(sig); if (hs <= 0 || hs >= NSIG) return 0; // Linux-only signal: pretend ok
+  int r = sigaction(hs, a ? &ha : NULL, &ho);
   if (r == 0 && o) { o->handler = (void *)ho.sa_sigaction; to_bionic(&o->mask, &ho.sa_mask); o->flags = fl_to_b(ho.sa_flags); o->restorer = 0; }
   return r;
 }
@@ -61,13 +69,6 @@ int bs_sigsuspend(const bsigset_t *s) { sigset_t h; to_host(&h, s); return sigsu
 int bs_sigpending(bsigset_t *s) { sigset_t h; int r = sigpending(&h); if (!r) to_bionic(s, &h); return r; }
 
 // bionic SIG_* numbers == Linux. Darwin numbering differs for some; translate when on Apple.
-#ifdef __APPLE__
-static int sig_to_host(int s) { switch (s) { case 7: return SIGBUS; case 10: return SIGUSR1; case 12: return SIGUSR2;
-  case 17: return SIGCHLD; case 18: return SIGCONT; case 19: return SIGSTOP; case 20: return SIGTSTP; case 23: return SIGURG; default: return s; } }
-#else
-static int sig_to_host(int s) { return s; }
-#endif
-typedef void (*bsh)(int);
 bsh bs_signal(int s, bsh h) { return signal(sig_to_host(s), h); }
 int bs_raise(int s) {
   if (s == 5) { fprintf(stderr, "[shim] raise(SIGTRAP) ignored (engine debugger break)\n"); return 0; }
