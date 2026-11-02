@@ -242,7 +242,8 @@ __attribute__((unused)) static void wait_for_jit(void) {
   }
 }
 
-int ios_jit_ok(void) { return jit_enabled(); } // live: StikDebug can attach while the launcher is open
+static int g_jit_ready; // set once the libs got their JIT memory; on iOS 26 we detach from StikDebug right after, so P_TRACED goes 0
+int ios_jit_ok(void) { return g_jit_ready || jit_enabled(); } // live: StikDebug can attach while the launcher is open
 __attribute__((unused)) static void wait_for_content(void) {
   wait_for_jit();
   while (!exists(g_docs, "garrysmod/garrysmod_dir.vpk") && !exists(g_docs, "garrysmod/gameinfo.txt")) {
@@ -375,7 +376,7 @@ int main(int argc, char **argv) {
   /* iOS 26 TXM: do every debugger request NOW, while StikDebug is still in the foreground-adjacent state
      (it gets suspended while the user sits in the launcher -> a later request would hang forever), then detach */
   so_skip("libSDL2.so"); so_skip("libopenxr_loader.so");
-  int reserved = 0; if (ios_jit_ok()) { so_jit_reserve_dir(lib); extern void so_jit_detach(void); so_jit_detach(); reserved = 1; }
+  int reserved = 0; if (jit_enabled()) { so_jit_reserve_dir(lib); extern void so_jit_detach(void); so_jit_detach(); reserved = 1; g_jit_ready = 1; }
   snprintf(rt, sizeof rt, "%s/rt", g_bundle);
   char ur[1200]; snprintf(ur, sizeof ur, "%s/../Library/user", g_docs); mkdir(ur, 0755); { char rp[1200]; if (realpath(ur, rp)) snprintf(ur, sizeof ur, "%s", rp); } snprintf(wr, sizeof wr, "%s/garrysmod", ur); mkdir(wr, 0755); { char rp[1200]; if (realpath(wr, rp)) snprintf(wr, sizeof wr, "%s", rp); }
   { extern void workshop_set_root(const char *); workshop_set_root(g_docs); }
