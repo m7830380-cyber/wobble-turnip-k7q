@@ -77,37 +77,42 @@ static void finish_login(UIViewController *vc, void (^done)(BOOL)) {
     });
   });
 }
-static void ask_code(UIViewController *vc, int guard, NSString *hint, void (^done)(BOOL)) {
+static void ask_code2(UIViewController *vc, int guard, NSString *hint, void (^done)(BOOL), BOOL poll, NSString *oops);
+static void ask_code(UIViewController *vc, int guard, NSString *hint, void (^done)(BOOL)) { ask_code2(vc, guard, hint, done, YES, nil); }
+static void ask_code2(UIViewController *vc, int guard, NSString *hint, void (^done)(BOOL), BOOL poll, NSString *oops) {
   BOOL email = !(guard & 1) && (guard & 2);
-  NSString *msg = (guard & 3) ? (email ? [NSString stringWithFormat:@"Steam emailed you a code%@", hint.length ? [NSString stringWithFormat:@" (%@)", hint] : @""]
-                                       : @"Type the code from the Steam app")
-                              : @"Approve it in the Steam app";
-  if ((guard & 4) && (guard & 3)) msg = [msg stringByAppendingString:@"\n(or just hit approve in the Steam app)"];
-  UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Steam Guard" message:msg preferredStyle:1];
+  NSString *msg = (guard & 3) ? (email ? [NSString stringWithFormat:@"Steam emailed you a code%@, check your inbox (and spam lol)", hint.length ? [NSString stringWithFormat:@" (%@)", hint] : @""]
+                                       : @"Open the Steam app → Steam Guard, type the 5 letter code")
+                              : @"Open the Steam app and hit approve, I'll wait";
+  if ((guard & 4) && (guard & 3)) msg = [msg stringByAppendingString:@"\n(or just hit approve in the Steam app, works too)"];
+  if (oops) msg = [NSString stringWithFormat:@"%@\n\n%@", oops, msg];
+  UIAlertController *a = [UIAlertController alertControllerWithTitle:@"2FA moment" message:msg preferredStyle:1];
   if (guard & 3) {
     [a addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"ABC12"; f.autocapitalizationType = UITextAutocapitalizationTypeAllCharacters; f.autocorrectionType = UITextAutocorrectionTypeNo; }];
     [a addAction:[UIAlertAction actionWithTitle:@"Send" style:0 handler:^(UIAlertAction *x) {
       NSString *code = a.textFields.firstObject.text ?: @"";
-      UIAlertController *w = [UIAlertController alertControllerWithTitle:@"Checking code…" message:nil preferredStyle:1];
+      UIAlertController *w = [UIAlertController alertControllerWithTitle:@"Checking the code…" message:nil preferredStyle:1];
       [w addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:^(UIAlertAction *y) { g_lcancel = 1; }]];
       [vc presentViewController:w animated:YES completion:nil];
       dispatch_async(dispatch_get_global_queue(0, 0), ^{
         char err[512] = ""; int r = sg_auth_code(code.UTF8String, email, err, sizeof err);
         NSString *E = @(err);
-        if (r) { g_lcancel = 1; dispatch_async(dispatch_get_main_queue(), ^{ [vc dismissViewControllerAnimated:NO completion:^{ say(vc, @"Steam Guard", E); }]; done(NO); }); }
+        if (r) dispatch_async(dispatch_get_main_queue(), ^{ // same login stays alive, just ask again
+          if (g_lcancel) return;
+          [vc dismissViewControllerAnimated:NO completion:^{ ask_code2(vc, guard, hint, done, NO, E); }]; });
       });
     }]];
   }
   [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:^(UIAlertAction *x) { g_lcancel = 1; }]];
   [vc presentViewController:a animated:YES completion:nil];
-  finish_login(vc, done); // polls in the background; picks up the code or the app approval
+  if (poll) finish_login(vc, done); // polls in the background; picks up the code or the app approval
 }
 void gi_login(UIViewController *vc, void (^done)(BOOL)) {
   UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Steam login"
-    message:@"Needs the account that owns Garry's Mod. Password goes straight to Steam (encrypted), never saved." preferredStyle:1];
+    message:@"The account that owns GMod. Password goes straight to Steam encrypted, I don't keep it. 2FA comes next" preferredStyle:1];
   [a addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"Username"; f.text = [UD stringForKey:@"steam_account"]; f.autocapitalizationType = 0; f.autocorrectionType = 1; f.textContentType = UITextContentTypeUsername; }];
   [a addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"Password"; f.secureTextEntry = YES; f.textContentType = UITextContentTypePassword; }];
-  [a addAction:[UIAlertAction actionWithTitle:@"Log in" style:0 handler:^(UIAlertAction *x) {
+  [a addAction:[UIAlertAction actionWithTitle:@"Go" style:0 handler:^(UIAlertAction *x) {
     NSString *u = [a.textFields[0].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet], *p = a.textFields[1].text ?: @"";
     if (!u.length || !p.length) { done(NO); return; }
     g_lcancel = 0;
@@ -148,7 +153,7 @@ void gi_login(UIViewController *vc, void (^done)(BOOL)) {
   self.status = [UILabel new]; self.status.textColor = UIColor.whiteColor; self.status.numberOfLines = 0; self.status.font = [UIFont systemFontOfSize:15];
   self.bar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault]; self.bar.progressTintColor = [UIColor colorWithRed:0.24 green:0.62 blue:1 alpha:1];
   self.detail = [UILabel new]; self.detail.textColor = [UIColor colorWithWhite:0.6 alpha:1]; self.detail.numberOfLines = 0; self.detail.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:0];
-  self.detail.text = @"Keep the app open + screen on, iOS kills downloads in the background";
+  self.detail.text = @"Keep the app open, screen stays on by itself. Leave the app and iOS kills it";
   self.cancel = [UIButton buttonWithType:UIButtonTypeSystem]; [self.cancel setTitle:@"Cancel" forState:0];
   for (UIView *v in @[self.title2, self.status, self.bar, self.detail, self.cancel]) [s addArrangedSubview:v];
 }
@@ -177,9 +182,9 @@ void gi_sync(UIViewController *parent, NSString *root, BOOL verify, void (^done)
   if (!tok || !acct) { gi_login(parent, ^(BOOL ok) { if (ok) gi_sync(parent, root, verify, done); else if (done) done(NO); }); return; }
   GIProgress *vc = [GIProgress new]; vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
   [parent presentViewController:vc animated:YES completion:nil];
-  vc.title2.text = verify ? @"Verifying game files" : @"Installing GMod"; vc.status.text = @"Starting…";
+  vc.title2.text = verify ? @"Checking your files" : @"Getting GMod"; vc.status.text = @"Warming up…";
   g_icancel = 0;
-  [vc.cancel addAction:[UIAction actionWithHandler:^(UIAction *a) { g_icancel = 1; vc.status.text = @"Stopping…"; }] forControlEvents:UIControlEventTouchUpInside];
+  [vc.cancel addAction:[UIAction actionWithHandler:^(UIAction *a) { g_icancel = 1; vc.status.text = @"Ok ok stopping…"; }] forControlEvents:UIControlEventTouchUpInside];
   UIApplication.sharedApplication.idleTimerDisabled = YES;
   __block UIBackgroundTaskIdentifier bt = [UIApplication.sharedApplication beginBackgroundTaskWithExpirationHandler:^{ [UIApplication.sharedApplication endBackgroundTask:bt]; bt = UIBackgroundTaskInvalid; }];
   gi_ud *ud = calloc(1, sizeof *ud); ud->vc = (__bridge void *)vc;
@@ -191,11 +196,11 @@ void gi_sync(UIViewController *parent, NSString *root, BOOL verify, void (^done)
       free(ud); UIApplication.sharedApplication.idleTimerDisabled = NO;
       if (bt != UIBackgroundTaskInvalid) { [UIApplication.sharedApplication endBackgroundTask:bt]; bt = UIBackgroundTaskInvalid; }
       [parent dismissViewControllerAnimated:YES completion:^{
-        if (r == -2) { gi_logout(); say(parent, @"Steam login expired", @"Log in again o algo"); if (done) done(NO); return; }
-        if (r) { if (!g_icancel) say(parent, verify ? @"Verify failed" : @"Install failed", E); if (done) done(NO); return; }
-        NSString *m = verify ? [NSString stringWithFormat:@"%llu files checked, %llu broken pieces fixed (%.1f MB redownloaded)", st.files, st.bad_chunks, st.downloaded / 1e6]
-                             : [NSString stringWithFormat:@"%llu files, %.2f GB downloaded. Go play", st.files, st.downloaded / 1e9];
-        say(parent, verify ? @"All good" : @"GMod installed", m); if (done) done(YES);
+        if (r == -2) { gi_logout(); say(parent, @"Steam logged you out", @"Log in again o algo"); if (done) done(NO); return; }
+        if (r) { if (!g_icancel) say(parent, verify ? @"Check broke" : @"Download broke", E); if (done) done(NO); return; }
+        NSString *m = verify ? [NSString stringWithFormat:@"%llu files checked, %llu broken bits fixed (%.1f MB redownloaded)", st.files, st.bad_chunks, st.downloaded / 1e6]
+                             : [NSString stringWithFormat:@"%llu files, %.2f GB pulled. Go play", st.files, st.downloaded / 1e9];
+        say(parent, verify ? @"All good fr" : @"GMod is in", m); if (done) done(YES);
       }];
     });
   });

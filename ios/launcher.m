@@ -105,8 +105,8 @@ static NSMutableArray<NSString *> *g_args;
     self.stContent = [self label:@"" size:15 bold:NO]; self.stSteam = [self label:@"" size:13 bold:NO];
     for (UILabel *l in @[self.stJit, self.stMem, self.stContent]) { l.font = [UIFont monospacedSystemFontOfSize:15 weight:UIFontWeightMedium]; [c addArrangedSubview:l]; }
     UIStackView *b = [UIStackView new]; b.axis = UILayoutConstraintAxisHorizontal; b.distribution = UIStackViewDistributionFillEqually; b.spacing = 10;
-    self.instBtn = [self button:@"Install GMod" action:@selector(installGame)];
-    self.verifyBtn = [self button:@"Verify files" action:@selector(verifyGame)];
+    self.instBtn = [self button:@"Get GMod" action:@selector(installGame)];
+    self.verifyBtn = [self button:@"Check files" action:@selector(verifyGame)];
     self.acctBtn = [self button:@"" action:@selector(steamAcct)];
     for (UIButton *x in @[self.instBtn, self.verifyBtn, self.acctBtn]) { x.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1]; x.layer.cornerRadius = 10; [x.heightAnchor constraintEqualToConstant:40].active = YES; [b addArrangedSubview:x]; }
     [c addArrangedSubview:b];
@@ -345,13 +345,13 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
   extern NSString *gi_content_missing(NSString *); extern NSString *gi_steam_user(void);
   UIColor *ok = [UIColor colorWithRed:0.35 green:0.85 blue:0.45 alpha:1], *bad = [UIColor colorWithRed:1 green:0.4 blue:0.35 alpha:1], *meh = [UIColor colorWithRed:1 green:0.75 blue:0.3 alpha:1];
   BOOL j = ios_jit_ok() != 0, m = gi_mem_entitled(); NSString *miss = gi_content_missing(self.docs);
-  self.stJit.text = [NSString stringWithFormat:@"JIT: %@", j ? @"True" : @"False  (open with StikDebug / TrollStore JIT)"]; self.stJit.textColor = j ? ok : bad;
+  self.stJit.text = [NSString stringWithFormat:@"JIT: %@", j ? @"True" : @"False  (StikDebug / TrollStore JIT pls)"]; self.stJit.textColor = j ? ok : bad;
   self.stMem.text = [NSString stringWithFormat:@"Memory Entitlement: %@  (limit ~%d MB)", m ? @"True" : @"False", gi_mem_limit_mb()]; self.stMem.textColor = m ? ok : meh;
   self.stContent.text = [NSString stringWithFormat:@"Game Content: %@", miss ? [NSString stringWithFormat:@"False  (missing %@)", miss] : @"True"]; self.stContent.textColor = miss ? bad : ok;
   NSString *u = gi_steam_user();
-  self.stSteam.text = u ? [NSString stringWithFormat:@"Steam: %@", u] : @"Steam: not logged in (only needed to download the game)";
+  self.stSteam.text = u ? [NSString stringWithFormat:@"Steam: %@", u] : @"Steam: not logged in (only for downloading the game)";
   [self.acctBtn setTitle:u ? @"Log out" : @"Steam login" forState:0];
-  [self.instBtn setTitle:miss ? @"Install GMod" : @"Update GMod" forState:0];
+  [self.instBtn setTitle:miss ? @"Get GMod" : @"Update GMod" forState:0];
   self.verifyBtn.enabled = !miss; self.verifyBtn.alpha = miss ? 0.4 : 1;
 }
 - (void)installGame { extern void gi_sync(UIViewController *, NSString *, BOOL, void (^)(BOOL)); gi_sync(self, self.docs, NO, ^(BOOL x) { [self refreshStatus]; }); }
@@ -359,7 +359,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
 - (void)steamAcct {
   extern NSString *gi_steam_user(void); extern void gi_logout(void); extern void gi_login(UIViewController *, void (^)(BOOL));
   if (gi_steam_user()) {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Log out of Steam?" message:@"Game files stay, you just need to log in again to update" preferredStyle:1];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Log out of Steam?" message:@"Game stays, you just log in again next update" preferredStyle:1];
     [a addAction:[UIAlertAction actionWithTitle:@"Log out" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *x) { gi_logout(); [self refreshStatus]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Nah" style:1 handler:nil]]; [self presentViewController:a animated:YES completion:nil];
   } else gi_login(self, ^(BOOL ok) { [self refreshStatus]; });
@@ -369,17 +369,17 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
   extern int ios_jit_ok(void); extern BOOL gi_mem_entitled(void); extern NSString *gi_content_missing(NSString *);
   [self refreshStatus];
   if (!ios_jit_ok()) {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"No JIT, no game" message:@"Enable JIT first: StikDebug (iOS 26: assign universal.js to GMod) or TrollStore → Open with JIT. The launcher picks it up by itself" preferredStyle:1];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"No JIT no game" message:@"Turn on JIT first: StikDebug (iOS 26: assign universal.js to GMod) or TrollStore → Open with JIT. No restart needed, it notices by itself" preferredStyle:1];
     [a addAction:[UIAlertAction actionWithTitle:@"OK" style:0 handler:nil]]; [self presentViewController:a animated:YES completion:nil]; return NO;
   }
   NSString *miss = gi_content_missing(self.docs);
   if (miss) {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"No game files" message:[NSString stringWithFormat:@"Missing: %@\nInstall it with your Steam account, or copy the folders in with Files", miss] preferredStyle:1];
-    [a addAction:[UIAlertAction actionWithTitle:@"Install GMod" style:0 handler:^(UIAlertAction *x) { [self installGame]; }]];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Where game files??" message:[NSString stringWithFormat:@"Missing: %@\nGrab it with your Steam account, or drop the folders in with Files", miss] preferredStyle:1];
+    [a addAction:[UIAlertAction actionWithTitle:@"Get GMod" style:0 handler:^(UIAlertAction *x) { [self installGame]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; [self presentViewController:a animated:YES completion:nil]; return NO;
   }
   if (!gi_mem_entitled()) {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Decreased RAM limit" message:@"No memory entitlement, so iOS gives the game less RAM. Recommended: sign with increased-memory-limit (GetMoreRam o algo). Big maps/addons may crash with out of RAM" preferredStyle:1];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Decreased RAM limit" message:@"No memory entitlement so iOS gives less RAM. Recommended: sign with increased-memory-limit (GetMoreRam o algo). Big maps/addons may crash out of RAM" preferredStyle:1];
     [a addAction:[UIAlertAction actionWithTitle:@"Play anyway" style:0 handler:^(UIAlertAction *x) { go(); }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; [self presentViewController:a animated:YES completion:nil]; return NO;
   }

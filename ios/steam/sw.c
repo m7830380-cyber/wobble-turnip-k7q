@@ -139,7 +139,7 @@ static int cm_connect(char *err, size_t errn, volatile int *cancel) {
     pbr rr; pb_init(&rr, m.body, m.bn); int eres = 2; while (pb_next(&rr)) if (rr.f == 1) eres = (int)rr.v;
     free(m.raw);
     g_logon_eres = eres;
-    if (eres != 1) { cm_close(); if (acct && (eres == 5 || eres == 15 || eres == 18)) { free(s); ERR("Steam login expired, log in again (EResult %d)", eres); }
+    if (eres != 1) { cm_close(); if (acct && (eres == 5 || eres == 15 || eres == 18)) { free(s); ERR("Steam login expired, log in again (code %d)", eres); }
       snprintf(e2, sizeof e2, "%s logon refused (EResult %d)", acct ? "account" : "anonymous", eres); continue; }
     sw_log("[steam] connected %s %s sid %llx", url, g_utok[0] ? "account" : "anon", (unsigned long long)g_cm.sid); free(s); return 0;
   }

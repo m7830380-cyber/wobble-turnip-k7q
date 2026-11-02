@@ -45,15 +45,15 @@ static int auth_call(const char *m, buf *b, int get, uint8_t **out, size_t *on, 
   free(enc); free(url);
   sw_log("[steamauth] %s -> HTTP %d eresult %d", m, st, xe);
   if (st < 0) ERR("Can't reach Steam, check your internet");
-  if (st == 429) { free(*out); ERR("Steam says slow down (too many tries). Wait a bit"); }
-  if (st != 200) { free(*out); ERR("Steam login is down rn (HTTP %d)", st); }
+  if (st == 429) { free(*out); ERR("Steam says chill, too many tries. Wait a bit"); }
+  if (st != 200) { free(*out); ERR("Steam login is dead rn (HTTP %d), try later", st); }
   if (xe != 1) {
     free(*out);
     switch (xe) {
       case 5: case 18: ERR("Wrong username or password");
-      case 65: case 88: ERR("Wrong Steam Guard code, try a new one");
+      case 65: case 88: ERR("Wrong code, try again (or wait for a new one)");
       case 84: case 87: ERR("Too many tries, Steam wants you to wait a bit");
-      case 17: ERR("That account is banned/disabled");
+      case 17: ERR("That account is banned/disabled rip");
       case 9: case 27: ERR("Login took too long, start again");
       default: ERR("Steam said no (code %d)", xe);
     }
@@ -70,9 +70,9 @@ int sg_auth_begin(const char *user, const char *pass, int *guard, char *hint, si
   free(o);
   if (!mod[0]) ERR("Wrong username or password");
   uint8_t mb[600], eb[32], cipher[600]; int ml = hexdec(mod, mb, sizeof mb), el = hexdec(ex, eb, sizeof eb);
-  if (ml <= 0 || el <= 0) ERR("Steam sent a weird key, try again");
+  if (ml <= 0 || el <= 0) ERR("Steam sent something weird, try again");
   int cl = sw_rsa_pkcs1(mb, ml, eb, el, (const uint8_t *)pass, strlen(pass), cipher, sizeof cipher);
-  if (cl <= 0) ERR("Couldn't encrypt the password (RSA failed)");
+  if (cl <= 0) ERR("Couldn't encrypt the password, idk why");
   char cb64[1000]; b64enc(cipher, cl, cb64);
   b = (buf){0}; fstr(&b, 1, "GMod iOS"); fstr(&b, 2, user); fstr(&b, 3, cb64); fvar(&b, 4, ts); fvar(&b, 6, 1); fvar(&b, 7, 1); fstr(&b, 8, "Client");
   { buf dd = {0}; fstr(&dd, 1, "GMod iOS"); fvar(&dd, 2, 1); fbytes(&b, 9, dd.p, dd.n); free(dd.p); }
@@ -133,7 +133,7 @@ static int pics_appinfo(uint32_t app, char **kv, char *err, size_t errn, volatil
   fvar(&a, 1, app); if (tok) fvar(&a, 2, tok); fbytes(&b, 2, a.p, a.n); free(a.p); ff64(&h, 10, job);
   cm_send(8903, &b, &h); free(b.p); free(h.p);
   for (int k = 0; k < 6; k++) {
-    cmmsg m; if (cm_wait(8904, job, &m, 30, cancel)) ERR("Steam didn't send the game info");
+    cmmsg m; if (cm_wait(8904, job, &m, 30, cancel)) ERR("Steam ghosted the game info request, try again");
     pbr r; pb_init(&r, m.body, m.bn); int pending = 0;
     while (pb_next(&r)) {
       if (r.f == 1 && r.d) {
@@ -144,7 +144,7 @@ static int pics_appinfo(uint32_t app, char **kv, char *err, size_t errn, volatil
     }
     free(m.raw); if (!pending) break;
   }
-  ERR("Steam didn't list Garry's Mod info (app %u)", app);
+  ERR("Steam has no GMod info for us (app %u), weird", app);
 }
 
 // ---------------- text KeyValues (appinfo) ----------------
@@ -222,11 +222,11 @@ static int depot_key(uint32_t app, uint32_t depot, uint8_t key[32], char *err, s
   if (cm_connect(err, errn, cancel)) return -1;
   uint64_t job = g_cm.job++; buf b = {0}, h = {0}; fvar(&b, 1, depot); fvar(&b, 2, app); ff64(&h, 10, job);
   cm_send(5438, &b, &h); free(b.p); free(h.p); cmmsg m;
-  if (cm_wait(5439, job, &m, 30, cancel)) ERR("Steam didn't answer the depot key request");
+  if (cm_wait(5439, job, &m, 30, cancel)) ERR("Steam ghosted us (depot key), try again");
   pbr r; pb_init(&r, m.body, m.bn); int eres = 2, kl = 0;
   while (pb_next(&r)) { if (r.f == 1) eres = (int)r.v; else if (r.f == 3 && r.dn == 32) { memcpy(key, r.d, 32); kl = 32; } }
   free(m.raw);
-  if (eres != 1 || kl != 32) ERR("Steam won't give depot %u (EResult %d). Do you own Garry's Mod on this account?", depot, eres);
+  if (eres != 1 || kl != 32) ERR("Steam won't give depot %u (code %d). You sure this account owns GMod?", depot, eres);
   return 0;
 }
 
@@ -291,8 +291,8 @@ static void state_set(const char *root, uint32_t depot, uint64_t gid) {
 static int sync_depot(const char *root, uint32_t app, const depinfo *dp, int verify, sw_progress *p, sg_stats *st, char *err, size_t errn) {
   volatile int *cancel = p ? p->cancel : NULL; uint64_t gid = strtoull(dp->gid, 0, 10); uint32_t depot = dp->id;
   static cpool c; memset(&c, 0, sizeof c); c.depot = depot; c.p = p; c.st = st; pthread_mutex_init(&c.mu, NULL);
-  char label[200]; snprintf(label, sizeof label, verify ? "Checking + fixing files (depot %u)" : "Downloading GMod (depot %u)", depot); c.label = label;
-  if (p && p->status) p->status(p->ud, "Asking Steam for the file list…", 0, 0);
+  char label[200]; snprintf(label, sizeof label, verify ? "Checking + fixing files (part %u)" : "Pulling GMod (part %u)", depot); c.label = label;
+  if (p && p->status) p->status(p->ud, "Getting the file list…", 0, 0);
   if (depot_key(app, depot, c.key, err, errn, cancel)) return -1;
   uint64_t code = 0;
   { buf b = {0}; fvar(&b, 1, app); fvar(&b, 2, depot); fvar(&b, 3, gid); fstr(&b, 4, "public"); cmmsg m;
@@ -305,8 +305,8 @@ static int sync_depot(const char *root, uint32_t app, const depinfo *dp, int ver
     char url[600]; snprintf(url, sizeof url, "https://%s/depot/%u/manifest/%llu/5/%llu", c.hosts[t % c.nh], depot, (unsigned long long)gid, (unsigned long long)code);
     sti = sw_http_get(url, &z, &zn, cancel, 0, 0); if (sti == 200) break; if (sti >= 0) free(z); z = NULL;
   }
-  if (!z) ERR("File list download failed (HTTP %d)", sti);
-  uint8_t *m; size_t mn; if (unzip1(z, zn, &m, &mn)) { free(z); ERR("Bad file list from Steam"); } free(z);
+  if (!z) ERR("File list download broke (HTTP %d)", sti);
+  uint8_t *m; size_t mn; if (unzip1(z, zn, &m, &mn)) { free(z); ERR("Steam sent a broken file list, try again"); } free(z);
   uint32_t mg, pl; memcpy(&mg, m, 4); memcpy(&pl, m + 4, 4);
   if (mn < 8 || mg != 0x71F617D0 || 8 + (size_t)pl > mn) { free(m); ERR("Unknown file list format"); }
   int enc = 0; if (16 + (size_t)pl <= mn) { uint32_t mg2, l2; memcpy(&mg2, m + 8 + pl, 4); memcpy(&l2, m + 12 + pl, 4); if (mg2 == 0x1F4812BE && 16 + pl + l2 <= mn) { pbr r; pb_init(&r, m + 16 + pl, l2); while (pb_next(&r)) if (r.f == 4) enc = (int)r.v; } }
@@ -347,13 +347,13 @@ static int sync_depot(const char *root, uint32_t app, const depinfo *dp, int ver
   free(m);
   sw_log("[game] depot %u gid %llu: %zu files to look at, %zu chunks, %.1f MB, deep %d", depot, (unsigned long long)gid, nf, c.nj, c.total / 1048576.0, deep);
   { struct statvfs vs; if (!statvfs(root, &vs)) { uint64_t fr = (uint64_t)vs.f_bavail * vs.f_frsize;
-      if (need > fr) { free(c.f); free(c.j); ERR("Not enough storage: need %.1f GB more, you have %.1f GB free", need / 1e9, fr / 1e9); } } }
+      if (need > fr) { free(c.f); free(c.j); ERR("No space bro: need %.1f GB more, you got %.1f GB free", need / 1e9, fr / 1e9); } } }
   pthread_t th[8]; int mt = getenv("SG_THREADS") ? atoi(getenv("SG_THREADS")) : 8; if (mt < 1 || mt > 8) mt = 8; int nt = c.nj < (size_t)mt ? (int)c.nj : mt;
   for (int i = 0; i < nt; i++) pthread_create(&th[i], NULL, chunk_worker, &c);
   for (int i = 0; i < nt; i++) pthread_join(th[i], NULL);
   free(c.f); free(c.j);
   if (cancel && *cancel) ERR("cancelled");
-  if (c.failed) ERR("%d pieces failed, last: %s. Try again", c.failed, c.why);
+  if (c.failed) ERR("%d pieces wouldn't download (last: %s). Hit it again, it keeps what it got", c.failed, c.why);
   state_set(root, depot, gid);
   return 0;
 }
@@ -365,7 +365,7 @@ int sg_game_sync(const char *root, const char *acct, const char *refresh, int ve
   if (p && p->status) p->status(p->ud, "Logging into Steam…", 0, 0);
   int rc = -1; char *kv = NULL;
   if (cm_connect(err, errn, cancel)) { if (g_logon_eres == 5 || g_logon_eres == 18 || g_logon_eres == 15) rc = -2; goto out; }
-  if (p && p->status) p->status(p->ud, "Getting game info…", 0, 0);
+  if (p && p->status) p->status(p->ud, "Asking Steam what GMod even is…", 0, 0);
   if (pics_appinfo(app, &kv, err, errn, cancel)) goto out;
   depinfo d[32]; int n = parse_depots(kv, d, 32), used = 0;
   for (int i = 0; i < n; i++) {
