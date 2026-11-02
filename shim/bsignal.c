@@ -10,7 +10,8 @@
 #include <pthread.h>
 
 typedef unsigned long bsigset_t;
-struct bsigaction { void *handler; bsigset_t mask; int flags; void *restorer; };
+// bionic LP64 (arm64): sa_flags comes FIRST (kernel layout), then handler, mask, restorer.
+struct bsigaction { int flags; void *handler; bsigset_t mask; void *restorer; };
 
 static void to_host(sigset_t *h, const bsigset_t *b) {
   sigemptyset(h); if (!b) return;
