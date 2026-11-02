@@ -188,7 +188,18 @@ static void lua_patch_once(void) {
              b = mprotect((void *)p2, 16384, PROT_READ | PROT_EXEC); }
       sys_icache_invalidate(ins, 4);
       fprintf(stderr, "[halo] transparent-entity refusal patched (%d %d)\n", a, b); }
-    else fprintf(stderr, "[halo] patch: unexpected insn %08x\n", *ins); }
+    else fprintf(stderr, "[halo] patch: unexpected insn %08x\n", *ins);
+    /* native physgun halo refuses held models with any translucent material (e.g. car glass:
+       "Model material models/combine_apc/glass (translucent=1 ...)") -> stock full-screen blur, 60 -> 23 fps.
+       Skip only the translucent test (tbnz w0,#0 -> nop); fullframe / power-of-two checks stay. */
+    uint32_t *t2 = (uint32_t *)(cl->base + 0x9b7024); uintptr_t p3 = (uintptr_t)t2 & ~(uintptr_t)16383;
+    if (*t2 == 0x370002e0) { int a = 0, b = 0;
+      if (so_is_mirrored(t2)) *(uint32_t *)so_wptr(t2) = 0xd503201f;
+      else { a = mprotect((void *)p3, 16384, PROT_READ | PROT_WRITE); *t2 = 0xd503201f;
+             b = mprotect((void *)p3, 16384, PROT_READ | PROT_EXEC); }
+      sys_icache_invalidate(t2, 4);
+      fprintf(stderr, "[halo] translucent-material refusal patched (%d %d)\n", a, b); }
+    else fprintf(stderr, "[halo] translucent patch: unexpected insn %08x\n", *t2); }
 }
 static void *my_luaL_newstate(void) { lua_patch_once();
   void *(*f)(void) = lua_real("luaL_newstate"); void *L = f(); 
