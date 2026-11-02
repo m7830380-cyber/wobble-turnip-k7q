@@ -133,7 +133,6 @@ static NSMutableArray<NSString *> *g_args;
   [self slider:c text:@"Framerate limit" key:@"fps" min:30 max:120 def:60 step:5 fmt:@"%@: %.0f FPS"];
   [self slider:c text:@"Render height" key:@"height" min:480 max:1290 def:1290 step:10 fmt:@"%@: %.0fp"];
   [self slider:c text:@"UI scale" key:@"ui_scale_percent" min:50 max:200 def:100 step:5 fmt:@"%@: %.0f%%"];
-  [self toggle:c text:@"Auto exposure (HDR)" key:@"autoexposure" def:YES];
   [self toggle:c text:@"Physgun halo (if shit happens)" key:@"physgun_halo" def:YES];
   [self toggle:c text:@"Simplified physgun glow (dont turn on unless issues)" key:@"fast_halo" def:NO];
   [self toggle:c text:@"sRGB fix (leave off unless HDR is off)" key:@"srgb_fix4" def:NO];
@@ -251,9 +250,6 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
   [s appendFormat:@"touch_sprint_toggle %d\n", bv(@"touch_sprint_toggle", NO)];
   [s appendFormat:@"touch_enable %d\n", bv(@"touch", YES)];
   [s appendFormat:@"vgui_ui_scale %g\n", fv(@"ui_scale_percent", 100) / 100.0];
-  /* "mat_autoexposure" doesn't exist in this engine (console: Unknown command); real cvars: */
-  if (bv(@"autoexposure", YES)) [s appendString:@"mat_dynamic_tonemapping 1\nmat_force_tonemap_scale 0\n"];
-  else [s appendString:@"mat_dynamic_tonemapping 0\nmat_force_tonemap_scale 1\n"];
   [s appendFormat:@"physgun_halo %d\n", bv(@"physgun_halo", YES)];
   [s appendFormat:@"gmod_physgun_fast_halo %d\n", bv(@"fast_halo", NO)];
   [s appendString:@"gmod_physgun_optimize_halo 1\ngl_program_binary_cache 0\n"];

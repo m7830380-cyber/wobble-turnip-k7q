@@ -101,9 +101,14 @@ int gs_SDL_GL_MakeCurrent(SDL_Window *w, SDL_GLContext c) {
   return p_eglMakeCurrent(g_dpy, c ? g_surf : NULL, c ? g_surf : NULL, c) ? 0 : -1;
 }
 static int sw_n, sw_black = -1;
+/* log every distinct GL debug message (first 3 times each), not just the first 400 overall */
 static void dbgcb(unsigned src, unsigned type, unsigned id, unsigned sev, int len, const char *msg, const void *u) {
-  static int c; if (type == 0x824C && c++ < 400) fprintf(stderr, "GLDBG err id=%u sev=%x: %s\n", id, sev, msg);
+  if (type != 0x824C) return; static char seen[32][96]; static int cnt[32], ns;
+  int i; for (i = 0; i < ns; i++) if (!strncmp(seen[i], msg, 95)) break;
+  if (i == ns) { if (ns >= 32) return; strncpy(seen[ns], msg, 95); cnt[ns++] = 0; }
+  if (cnt[i]++ < 3) fprintf(stderr, "GLDBG err id=%u sev=%x (#%d this msg) frame %d: %s\n", id, sev, cnt[i], sw_n, msg);
 }
+#include <mach/mach_time.h>
 void gs_SDL_GL_SwapWindow(SDL_Window *w) {
   (void)w; if (!(g_dpy && g_surf)) return;
   static void (*gi)(unsigned, int *); static void (*rp)(int,int,int,int,unsigned,unsigned,void*); static void (*bf)(unsigned,unsigned);
@@ -112,16 +117,24 @@ void gs_SDL_GL_SwapWindow(SDL_Window *w) {
     dc = ios_gl_proc("glDebugMessageCallbackKHR"); en = ios_gl_proc("glEnable");
     if (dc && en) { en(0x92E0); en(0x8242); dc((void*)dbgcb, 0); fprintf(stderr, "GLDBG callback on\n"); } }
   sw_n++;
-  int fb = 0, vp[4] = {0}; gi(0x8CAA, &fb); gi(0x0BA2, vp);
-  unsigned e = ge();
-  bf(0x8CA8, 0); unsigned char px[3][4] = {{0}}; int W = vp[2] > 0 ? vp[2] : 100, H = vp[3] > 0 ? vp[3] : 100;
-  rp(W/2, H/2, 1, 1, 0x1908, 0x1401, px[0]); rp(W/4, H/4, 1, 1, 0x1908, 0x1401, px[1]); rp(W*3/4, H*3/4, 1, 1, 0x1908, 0x1401, px[2]);
-  bf(0x8CA9, fb);
-  int black = 1; for (int i = 0; i < 3; i++) if (px[i][0] > 8 || px[i][1] > 8 || px[i][2] > 8) black = 0;
-  if (black != sw_black || e || (sw_n % 600) == 0)
-    fprintf(stderr, "SWAPDIAG #%d black=%d glerr=0x%x drawfb=%d vp=%d,%d %dx%d px=%d,%d,%d,%d %d,%d,%d %d,%d,%d\n", sw_n, black, e, fb, vp[0], vp[1], vp[2], vp[3],
-      px[0][0], px[0][1], px[0][2], px[0][3], px[1][0], px[1][1], px[1][2], px[2][0], px[2][1], px[2][2]);
-  sw_black = black;
+  /* frame timing: avg/worst over each ~2 s window */
+  static uint64_t t0, tw; static double mx; static int nf; static mach_timebase_info_data_t tb;
+  if (!tb.denom) mach_timebase_info(&tb);
+  uint64_t now = mach_absolute_time(); double ms = t0 ? (double)(now - t0) * tb.numer / tb.denom / 1e6 : 0; t0 = now;
+  if (!tw) tw = now; nf++; if (ms > mx) mx = ms;
+  double win = (double)(now - tw) * tb.numer / tb.denom / 1e6;
+  unsigned e = ge(); static unsigned laste; static int ecount;
+  if (e) ecount++;
+  if (e != laste) { fprintf(stderr, "GLERR frame %d: 0x%x -> 0x%x\n", sw_n, laste, e); laste = e; }
+  if (win >= 2000) {
+    /* brightness: 8x8 grid of the frame about to be shown, average luma 0..255 */
+    int fb = 0, vp[4] = {0}; gi(0x8CAA, &fb); gi(0x0BA2, vp); int W = vp[2] > 0 ? vp[2] : 100, H = vp[3] > 0 ? vp[3] : 100;
+    bf(0x8CA8, 0); long sum = 0; unsigned char px[4];
+    for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) { rp(W*(2*x+1)/16, H*(2*y+1)/16, 1, 1, 0x1908, 0x1401, px); sum += (px[0]*299 + px[1]*587 + px[2]*114) / 1000; }
+    bf(0x8CA9, fb);
+    fprintf(stderr, "FRAME #%d fps %.1f worst %.1f ms luma %ld glerr-frames %d\n", sw_n, nf * 1000.0 / win, mx, sum / 64, ecount);
+    tw = now; nf = 0; mx = 0; ecount = 0;
+  }
   p_eglSwapBuffers(g_dpy, g_surf);
 }
 int gs_SDL_GL_SetSwapInterval(int i) { return g_dpy && p_eglSwapInterval(g_dpy, i) ? 0 : -1; }

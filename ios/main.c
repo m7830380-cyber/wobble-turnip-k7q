@@ -89,7 +89,7 @@ static void halochk(int c){ if(g_dumped||c>24) return; int st=0,bl=0,tx=0,vp[4],
  if(!st||!bl||vp[2]<1000) return; if(++g_hframe<120) return; g_dumped=1; SD("HALOCAP fb %d tex %u sfunc 0x%x",fb,tx,sf); dumptex(tx,"blur"); dumpfb(fb,vp[2],vp[3],"pre"); }
 static void halopost(int c){ if(g_dumped==1&&c<=24){ g_dumped=2; int fb=0,vp[4]; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); dumpfb(fb,vp[2],vp[3],"post"); } }
 
-static void dinfo(const char*k,int c){ if(g_sdiag<0||g_sdiag>=6000) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,vp[4]={0},at=0,tx=0,ws=0,bl=0,sf[4]={0}; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); r_giv(0x84E0,&at); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0BE1,sf); r_giv(0x0BE0,&sf[1]); r_giv(0x0B90,&ws);
+static void dinfo(const char*k,int c){ if(g_sdiag<0||g_sdiag>=6000) return; if(!r_giv) r_giv=gl_proc("glGetIntegerv"); int fb=0,vp[4]={0},at=0,tx=0,ws=0,bl=0,sf[4]={0}; r_giv(0x8CA6,&fb); r_giv(0x0BA2,vp); r_giv(0x84E0,&at); r_giv(0x8069,&tx); r_giv(0x0BE2,&bl); r_giv(0x0B90,&ws);
  SD("%s %d fb %d vp %dx%d tex%d %u(%dx%d) blend %d st %d", k,c,fb,vp[2],vp[3],at-0x84C0,tx,tx<65536?g_tw[tx]:-1,tx<65536?g_th[tx]:-1,bl,ws); }
 static void (*r_dre)(unsigned,unsigned,unsigned,int,unsigned,const void*),(*r_debv)(unsigned,int,unsigned,const void*,int),(*r_drebv)(unsigned,unsigned,unsigned,int,unsigned,const void*,int);
 static void w_dre(unsigned m,unsigned a,unsigned b,int c,unsigned t,const void*i){dinfo("dRE",c);halochk(c);r_dre(m,a,b,c,t,i);halopost(c);}
