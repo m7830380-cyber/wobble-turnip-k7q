@@ -100,7 +100,9 @@ int gs_SDL_GL_MakeCurrent(SDL_Window *w, SDL_GLContext c) {
   (void)w; if (!g_dpy) return -1;
   return p_eglMakeCurrent(g_dpy, c ? g_surf : NULL, c ? g_surf : NULL, c) ? 0 : -1;
 }
-static int sw_n, sw_black = -1;
+static int sw_n, sw_black = -1; static double sw_ms;
+#include <sys/resource.h>
+#include <time.h>
 /* log every distinct GL debug message (first 3 times each), not just the first 400 overall */
 static void dbgcb(unsigned src, unsigned type, unsigned id, unsigned sev, int len, const char *msg, const void *u) {
   if (type != 0x824C) return; static char seen[32][96]; static int cnt[32], ns;
@@ -132,10 +134,16 @@ void gs_SDL_GL_SwapWindow(SDL_Window *w) {
     bf(0x8CA8, 0); long sum = 0; unsigned char px[4];
     for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) { rp(W*(2*x+1)/16, H*(2*y+1)/16, 1, 1, 0x1908, 0x1401, px); sum += (px[0]*299 + px[1]*587 + px[2]*114) / 1000; }
     bf(0x8CA9, fb);
-    fprintf(stderr, "FRAME #%d fps %.1f worst %.1f ms luma %ld glerr-frames %d\n", sw_n, nf * 1000.0 / win, mx, sum / 64, ecount);
+    /* CPU vs GPU split: main-thread CPU ms/frame, ms/frame blocked in eglSwapBuffers, whole-process CPU % */
+    struct timespec ts; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts); double tc = ts.tv_sec * 1e3 + ts.tv_nsec / 1e6;
+    struct rusage ru; getrusage(RUSAGE_SELF, &ru); double pc = (ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) * 1e3 + (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) / 1e3;
+    static double ltc, lpc;
+    fprintf(stderr, "FRAME #%d fps %.1f worst %.1f ms luma %ld glerr-frames %d | main cpu %.1f ms/f swap %.1f ms/f proc cpu %.0f%%\n", sw_n, nf * 1000.0 / win, mx, sum / 64, ecount,
+      ltc ? (tc - ltc) / nf : 0, sw_ms / nf, lpc ? (pc - lpc) * 100 / win : 0);
+    ltc = tc; lpc = pc; sw_ms = 0;
     tw = now; nf = 0; mx = 0; ecount = 0;
   }
-  p_eglSwapBuffers(g_dpy, g_surf);
+  { uint64_t s0 = mach_absolute_time(); p_eglSwapBuffers(g_dpy, g_surf); sw_ms += (double)(mach_absolute_time() - s0) * tb.numer / tb.denom / 1e6; }
 }
 int gs_SDL_GL_SetSwapInterval(int i) { return g_dpy && p_eglSwapInterval(g_dpy, i) ? 0 : -1; }
 int gs_SDL_GL_GetSwapInterval(void) { return 1; }
