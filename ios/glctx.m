@@ -101,6 +101,8 @@ int gs_SDL_GL_MakeCurrent(SDL_Window *w, SDL_GLContext c) {
   return p_eglMakeCurrent(g_dpy, c ? g_surf : NULL, c ? g_surf : NULL, c) ? 0 : -1;
 }
 static int sw_n, sw_black = -1; static double sw_ms;
+#include <mach/mach.h>
+volatile unsigned g_render_thread; volatile int g_prof_want;
 #include <sys/resource.h>
 #include <time.h>
 /* log every distinct GL debug message (first 3 times each), not just the first 400 overall */
@@ -141,6 +143,7 @@ void gs_SDL_GL_SwapWindow(SDL_Window *w) {
     fprintf(stderr, "FRAME #%d fps %.1f worst %.1f ms luma %ld glerr-frames %d | main cpu %.1f ms/f swap %.1f ms/f proc cpu %.0f%%\n", sw_n, nf * 1000.0 / win, mx, sum / 64, ecount,
       ltc ? (tc - ltc) / nf : 0, sw_ms / nf, lpc ? (pc - lpc) * 100 / win : 0);
     ltc = tc; lpc = pc; sw_ms = 0;
+    g_render_thread = mach_thread_self(); g_prof_want = (nf * 1000.0 / win) < 45 && sw_n > 600;
     tw = now; nf = 0; mx = 0; ecount = 0;
   }
   { uint64_t s0 = mach_absolute_time(); p_eglSwapBuffers(g_dpy, g_surf); sw_ms += (double)(mach_absolute_time() - s0) * tb.numer / tb.denom / 1e6; }

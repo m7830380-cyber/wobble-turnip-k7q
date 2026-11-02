@@ -301,6 +301,35 @@ static void mem_log(int force) {
   if (force || mb - lastmb >= 100 || lastmb - mb >= 100 || av < 300) { lastmb = mb;
     fprintf(stderr, "[mem] footprint %d MB (peak %d), available before kill %d MB\n", mb, peak, av); }
 }
+/* sampling profiler of the render thread while fps is low: 600 samples ~3 s, top self + inclusive addresses */
+extern volatile unsigned g_render_thread; extern volatile int g_prof_want;
+#define PH 8192
+static uintptr_t ph_k[PH]; static int ph_s[PH], ph_i[PH];
+static void ph_add(uintptr_t a, int self) { a &= 0x0000000fffffffffULL; if (!a) return; unsigned h = (unsigned)((a >> 2) * 2654435761u) % PH;
+  for (int k = 0; k < PH; k++, h = (h + 1) % PH) { if (ph_k[h] == a || !ph_k[h]) { ph_k[h] = a; if (self) ph_s[h]++; else ph_i[h]++; return; } } }
+static void ph_top(int *v, const char *tag, int total) { for (int r = 0; r < 25; r++) { int b = -1; for (int k = 0; k < PH; k++) if (ph_k[k] && v[k] > 0 && (b < 0 || v[k] > v[b])) b = k;
+    if (b < 0) break; char t[64]; snprintf(t, sizeof t, "[prof] %s %3d%%", tag, v[b] * 100 / total); so_describe(t, (void *)ph_k[b]); v[b] = -v[b]; } }
+static void *profiler(void *u) {
+  for (int round = 0; round < 3;) {
+    usleep(200000); if (!g_prof_want || !g_render_thread) continue;
+    memset(ph_k, 0, sizeof ph_k); memset(ph_s, 0, sizeof ph_s); memset(ph_i, 0, sizeof ph_i); int n = 0;
+    thread_t t = g_render_thread;
+    for (int i = 0; i < 600; i++) { usleep(5000);
+      if (thread_suspend(t)) break;
+      arm_thread_state64_t st; mach_msg_type_number_t c = ARM_THREAD_STATE64_COUNT;
+      if (!thread_get_state(t, ARM_THREAD_STATE64, (thread_state_t)&st, &c)) { n++;
+        uintptr_t pc = (uintptr_t)arm_thread_state64_get_pc(st); ph_add(pc, 1); ph_add((uintptr_t)arm_thread_state64_get_lr(st), 0);
+        uint64_t *fp = (uint64_t *)arm_thread_state64_get_fp(st); uintptr_t seen[24]; int ns = 0;
+        for (int k = 0; k < 24 && fp && ((uintptr_t)fp & 7) == 0 && (uintptr_t)fp > 0x100000000ULL; k++) { uintptr_t ra = fp[1] & 0x0000000fffffffffULL; int dup = 0;
+          for (int q = 0; q < ns; q++) if (seen[q] == ra) dup = 1; if (!dup) { seen[ns++] = ra; ph_add(ra, 0); } fp = (uint64_t *)fp[0]; } }
+      thread_resume(t); }
+    if (n < 50) continue; round++;
+    fprintf(stderr, "[prof] round %d: %d samples of render thread (fps low)\n", round, n);
+    ph_top(ph_s, "self", n); ph_top(ph_i, "incl", n);
+    usleep(3000000);
+  }
+  return NULL;
+}
 static void *watchdog(void *a) {
   off_t last = -1; int idle = 0, dumps = 0;
   mem_log(1);
@@ -332,6 +361,7 @@ int main(int argc, char **argv) {
   freopen(log, "w", stderr); setvbuf(stderr, NULL, _IONBF, 0);
   snprintf(g_logpath, sizeof g_logpath, "%s", log);
   { pthread_t t; pthread_create(&t, NULL, watchdog, NULL); pthread_detach(t); }
+  { pthread_t t; pthread_create(&t, NULL, profiler, NULL); pthread_detach(t); }
   setenv("SO_MAP", "1", 1); setenv("SO_VERBOSE", "1", 1); setenv("JNI_VERBOSE", "1", 1); setenv("JNI_VERBOSE", "1", 1);
   { struct sigaction sa = {0}; sa.sa_sigaction = on_crash; sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
     static char alt[65536]; stack_t ss = {alt, 0, sizeof alt}; sigaltstack(&ss, NULL);
