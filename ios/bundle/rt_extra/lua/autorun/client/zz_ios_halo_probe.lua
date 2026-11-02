@@ -38,5 +38,15 @@ timer.Create("ios_halo_probe", 2, 0, function()
     if stats.stock + stats.native_ok + stats.native_fail == 0 then return end
     print(string.format("[haloprobe] 2s: halo.Render calls %d (%.1f ms CPU) native ok %d fail %d (%.1f ms)",
         stats.stock, stats.stock_ms, stats.native_ok, stats.native_fail, stats.native_ms))
+    if render.GetGModPhysgunHaloOptimizationStats then
+        local ok, a, b, c, d = pcall(render.GetGModPhysgunHaloOptimizationStats)
+        if ok and type(a) == "table" then
+            local parts = {}
+            for k, v in pairs(a) do parts[#parts + 1] = tostring(k) .. "=" .. tostring(v) end
+            print("[haloprobe] stats: " .. table.concat(parts, " "))
+        else
+            print("[haloprobe] stats: ", ok, a, b, c, d)
+        end
+    end
     stats = {native_ok = 0, native_fail = 0, stock = 0, stock_ms = 0, native_ms = 0}
 end)

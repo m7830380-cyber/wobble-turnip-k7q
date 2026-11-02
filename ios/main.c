@@ -299,11 +299,11 @@ static void *watchdog(void *a) {
   for (;;) {
     sleep(1);
     mem_log(0);
-    { static so_module *cl; static char last[200]; static int lg[6]; if(!cl && getenv("GMOD_NHALO_DIAG")) cl=so_find("libclient.so");
-      if(cl){ const char *r=(const char*)(cl->base+0x13eb028); if(r[0]&&strncmp(r,last,191)){ strncpy(last,r,191); fprintf(stderr,"[nhalo] reason: %.191s\n",r); }
-        int v[6]; v[0]=*(volatile int*)(cl->base+0x13f7f90); v[1]=*(volatile unsigned char*)(cl->base+0x13eb010); v[2]=*(volatile int*)(cl->base+0x13eb288);
-        uint64_t q=*(volatile uint64_t*)(cl->base+0x13eafb0); v[3]=q!=0; const uint64_t*vv=(const uint64_t*)(cl->base+0x13f7d10); v[4]=vv[0]!=vv[1];
-        uint64_t cv=*(volatile uint64_t*)(cl->base+0x13eaed8); v[5]=cv?*(volatile int*)(cv+88):-1;
+    { static so_module *cl; static char last[200]; static int lg[6]; if(!cl) cl=so_find("libclient.so"); /* 0.1.31 offsets */
+      if(cl){ const char *r=(const char*)(cl->base+0x1467648); if(r[0]&&strncmp(r,last,191)){ strncpy(last,r,191); fprintf(stderr,"[nhalo] reason: %.191s\n",r); }
+        int v[6]; v[0]=*(volatile int*)(cl->base+0x14751d0); v[1]=*(volatile unsigned char*)(cl->base+0x1467630); v[2]=*(volatile int*)(cl->base+0x14678a8);
+        uint64_t q=*(volatile uint64_t*)(cl->base+0x14675d0); v[3]=q!=0; const uint64_t*vv=(const uint64_t*)(cl->base+0x1474f50); v[4]=vv[0]!=vv[1];
+        uint64_t cv=*(volatile uint64_t*)(cl->base+0x14674f8); v[5]=cv?*(volatile int*)(cv+88):-1;
         if(memcmp(v,lg,sizeof v)){ memcpy(lg,v,sizeof v); fprintf(stderr,"[nhalo] gates f90=%d b010=%d e288=%d fb0=%d vec=%d cvar=%d\n",v[0],v[1],v[2],v[3],v[4],v[5]); } } }
     struct stat st; if (stat(g_logpath, &st)) continue;
     if (st.st_size != last) { last = st.st_size; idle = 0; continue; }
