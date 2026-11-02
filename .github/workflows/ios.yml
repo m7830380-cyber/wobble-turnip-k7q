@@ -45,6 +45,7 @@ jobs:
           cp -R ref/Payload/hl2.app/Frameworks/{SDL2,libEGL,libGLESv2}.framework $APP/Frameworks/
           cp apk/lib/arm64-v8a/*.so $APP/lib/; rm -f $APP/lib/libSDL2.so $APP/lib/libopenxr_loader.so
           (cd $APP/rt && unzip -q ../../../apk/assets/runtime.zip)
+          cp -R ios/bundle/rt_extra/. $APP/rt/
           mkdir -p $APP/touch && python3 tools/vtf2png.py apk/assets/touch_preview $APP/touch && cp apk/assets/touch_default.cfg $APP/touch/
           cp ios/bundle/touch/*.png $APP/touch/; ls $APP/touch | wc -l
           codesign --entitlements ${3:-ios/entitlements.plist} --sign - --force --deep $APP
