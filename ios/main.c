@@ -260,6 +260,7 @@ static void on_crash(int sig, siginfo_t *si, void *uc_) {
 
 #include <mach/mach.h>
 #include <pthread.h>
+#include <dispatch/dispatch.h>
 static char g_logpath[1200];
 static void dump_threads(void) {
   thread_act_array_t th; mach_msg_type_number_t n; thread_t self = mach_thread_self();
@@ -279,10 +280,25 @@ static void dump_threads(void) {
     thread_resume(th[i]);
   }
 }
+#include <os/proc.h>
+#include <mach/task_info.h>
+static void mem_log(int force) {
+  static int peak, lastmb = -1000; task_vm_info_data_t vi; mach_msg_type_number_t c = TASK_VM_INFO_COUNT;
+  if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vi, &c)) return;
+  int mb = (int)(vi.phys_footprint >> 20), av = (int)(os_proc_available_memory() >> 20);
+  if (mb > peak) peak = mb;
+  if (force || mb - lastmb >= 100 || lastmb - mb >= 100 || av < 300) { lastmb = mb;
+    fprintf(stderr, "[mem] footprint %d MB (peak %d), available before kill %d MB\n", mb, peak, av); }
+}
 static void *watchdog(void *a) {
   off_t last = -1; int idle = 0, dumps = 0;
+  mem_log(1);
+  dispatch_source_t ps = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0, DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL, dispatch_get_global_queue(0, 0));
+  dispatch_source_set_event_handler(ps, ^{ fprintf(stderr, "[mem] iOS memory pressure %s\n", dispatch_source_get_data(ps) & DISPATCH_MEMORYPRESSURE_CRITICAL ? "CRITICAL" : "warning"); mem_log(1); });
+  dispatch_resume(ps);
   for (;;) {
     sleep(1);
+    mem_log(0);
     { static so_module *cl; static char last[200]; static int lg[6]; if(!cl && getenv("GMOD_NHALO_DIAG")) cl=so_find("libclient.so");
       if(cl){ const char *r=(const char*)(cl->base+0x13eb028); if(r[0]&&strncmp(r,last,191)){ strncpy(last,r,191); fprintf(stderr,"[nhalo] reason: %.191s\n",r); }
         int v[6]; v[0]=*(volatile int*)(cl->base+0x13f7f90); v[1]=*(volatile unsigned char*)(cl->base+0x13eb010); v[2]=*(volatile int*)(cl->base+0x13eb288);
