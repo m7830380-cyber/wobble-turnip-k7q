@@ -361,7 +361,7 @@ int main(int argc, char **argv) {
   freopen(log, "w", stderr); setvbuf(stderr, NULL, _IONBF, 0);
   snprintf(g_logpath, sizeof g_logpath, "%s", log);
   { pthread_t t; pthread_create(&t, NULL, watchdog, NULL); pthread_detach(t); }
-  { pthread_t t; pthread_create(&t, NULL, profiler, NULL); pthread_detach(t); }
+  (void)profiler; /* profiler disabled: frame-pointer walk crashed on LuaJIT frames */
   setenv("SO_MAP", "1", 1); setenv("SO_VERBOSE", "1", 1); setenv("JNI_VERBOSE", "1", 1); setenv("JNI_VERBOSE", "1", 1);
   { struct sigaction sa = {0}; sa.sa_sigaction = on_crash; sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
     static char alt[65536]; stack_t ss = {alt, 0, sizeof alt}; sigaltstack(&ss, NULL);
