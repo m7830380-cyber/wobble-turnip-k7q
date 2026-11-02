@@ -94,7 +94,7 @@ static NSMutableArray<NSString *> *g_args;
   w.active = YES; [self.stack.widthAnchor constraintLessThanOrEqualToConstant:620].active = YES;
 
   UILabel *title = [self label:@"Garry's Mod" size:30 bold:YES]; [self.stack addArrangedSubview:title];
-  UILabel *sub = [self label:@"GDroid iOS launcher" size:14 bold:NO]; sub.textColor = [UIColor colorWithWhite:0.55 alpha:1];
+  UILabel *sub = [self label:[NSString stringWithFormat:@"GDroid iOS launcher · build %@ (%@)", NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"], NSBundle.mainBundle.infoDictionary[@"GMBuildSHA"] ?: @"?"] size:14 bold:NO]; sub.textColor = [UIColor colorWithWhite:0.55 alpha:1];
   [self.stack addArrangedSubview:sub];
 
   UIButton *play = [UIButton buttonWithType:UIButtonTypeSystem];

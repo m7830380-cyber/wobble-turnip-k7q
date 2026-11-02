@@ -40,6 +40,7 @@ jobs:
         run: |
           APP=Payload/GMod.app; mkdir -p $APP/Frameworks $APP/lib $APP/rt
           cp gmod ios/bundle/Info.plist $APP/
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" -c "Set :CFBundleShortVersionString 1.0.${GITHUB_RUN_NUMBER}" -c "Add :GMBuildSHA string ${GITHUB_SHA::7}" $APP/Info.plist
           ibtool --compile $APP/LaunchScreen.storyboardc ios/bundle/LaunchScreen.storyboard
           cp -R ref/Payload/hl2.app/Frameworks/{SDL2,libEGL,libGLESv2}.framework $APP/Frameworks/
           cp apk/lib/arm64-v8a/*.so $APP/lib/; rm -f $APP/lib/libSDL2.so $APP/lib/libopenxr_loader.so
