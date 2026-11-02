@@ -1,6 +1,8 @@
 // iOS transport for the Steam client: NSURLSessionWebSocketTask, NSURLSession, CommonCrypto.
 #import <Foundation/Foundation.h>
 #include <CommonCrypto/CommonCryptor.h>
+#include <CommonCrypto/CommonDigest.h>
+#include <Security/Security.h>
 #include "sw.h"
 
 struct sw_ws { void *task; void *sess; };
@@ -76,3 +78,37 @@ int sw_aes_ecb_dec(const uint8_t key[32], const uint8_t in[16], uint8_t out[16])
 int sw_aes_cbc_dec(const uint8_t key[32], const uint8_t iv[16], const uint8_t *in, size_t n, uint8_t *out) {
   size_t m; return CCCrypt(kCCDecrypt, kCCAlgorithmAES, 0, key, 32, iv, in, n, out, n, &m) == kCCSuccess ? 0 : -1;
 }
+
+int sw_http_req(const char *method, const char *url, const void *body, size_t bn, const char *ctype, uint8_t **out, size_t *n, int *xeres) {
+  NSMutableURLRequest *r = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@(url)]];
+  r.HTTPMethod = @(method); r.timeoutInterval = 25; r.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+  if (body) { r.HTTPBody = [NSData dataWithBytes:body length:bn]; if (ctype) [r setValue:@(ctype) forHTTPHeaderField:@"Content-Type"]; }
+  dispatch_semaphore_t sem = dispatch_semaphore_create(0); __block NSData *res = nil; __block long code = -1; __block int xe = 1;
+  [[NSURLSession.sharedSession dataTaskWithRequest:r completionHandler:^(NSData *d, NSURLResponse *rs, NSError *e) {
+    if (!e) { NSHTTPURLResponse *h = (NSHTTPURLResponse *)rs; res = d; code = h.statusCode; NSString *x = [h valueForHTTPHeaderField:@"x-eresult"]; if (x) xe = x.intValue; }
+    dispatch_semaphore_signal(sem); }] resume];
+  dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+  if (xeres) *xeres = xe;
+  if (code < 0) return -1;
+  *n = res.length; *out = malloc(res.length + 1); memcpy(*out, res.bytes, res.length); (*out)[res.length] = 0; return (int)code;
+}
+static NSData *der_int(const uint8_t *p, size_t n) {
+  NSMutableData *d = [NSMutableData dataWithBytes:"\x02" length:1]; NSMutableData *v = [NSMutableData data];
+  if (n && (p[0] & 0x80)) [v appendBytes:"\0" length:1]; [v appendBytes:p length:n];
+  size_t l = v.length; uint8_t h[3]; int hl;
+  if (l < 128) { h[0] = l; hl = 1; } else if (l < 256) { h[0] = 0x81; h[1] = l; hl = 2; } else { h[0] = 0x82; h[1] = l >> 8; h[2] = l; hl = 3; }
+  [d appendBytes:h length:hl]; [d appendData:v]; return d;
+}
+int sw_rsa_pkcs1(const uint8_t *mod, size_t mn, const uint8_t *ex, size_t en, const uint8_t *in, size_t inn, uint8_t *out, size_t outn) {
+  NSMutableData *body = [NSMutableData data]; [body appendData:der_int(mod, mn)]; [body appendData:der_int(ex, en)];
+  NSMutableData *seq = [NSMutableData dataWithBytes:"\x30" length:1]; size_t l = body.length; uint8_t h[3]; int hl;
+  if (l < 128) { h[0] = l; hl = 1; } else if (l < 256) { h[0] = 0x81; h[1] = l; hl = 2; } else { h[0] = 0x82; h[1] = l >> 8; h[2] = l; hl = 3; }
+  [seq appendBytes:h length:hl]; [seq appendData:body];
+  NSDictionary *a = @{(id)kSecAttrKeyType: (id)kSecAttrKeyTypeRSA, (id)kSecAttrKeyClass: (id)kSecAttrKeyClassPublic, (id)kSecAttrKeySizeInBits: @(mn * 8)};
+  CFErrorRef e = NULL; SecKeyRef k = SecKeyCreateWithData((__bridge CFDataRef)seq, (__bridge CFDictionaryRef)a, &e);
+  if (!k) return -1;
+  CFDataRef c = SecKeyCreateEncryptedData(k, kSecKeyAlgorithmRSAEncryptionPKCS1, (__bridge CFDataRef)[NSData dataWithBytes:in length:inn], &e);
+  CFRelease(k); if (!c) return -1;
+  size_t cl = CFDataGetLength(c); int r = -1; if (cl <= outn) { memcpy(out, CFDataGetBytePtr(c), cl); r = (int)cl; } CFRelease(c); return r;
+}
+void sw_sha1(const void *p, size_t n, uint8_t out[20]) { CC_SHA1(p, (CC_LONG)n, out); }

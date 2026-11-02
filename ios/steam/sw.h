@@ -37,3 +37,21 @@ int sw_install(const char *root, uint64_t id, int join, sw_progress *p, char *er
 // Already installed with at least this time (and crc if nonzero)?
 int sw_installed(const char *root, uint64_t id, uint64_t time, uint64_t crc, int join);
 void sw_log(const char *fmt, ...);
+
+// ---- extra transport for account login / game download ----
+// generic request; method "GET"/"POST"; body may be NULL. *xeres = x-eresult header (or 1 if absent)
+int sw_http_req(const char *method, const char *url, const void *body, size_t bn, const char *ctype, uint8_t **out, size_t *n, int *xeres);
+// RSA PKCS#1 v1.5 encrypt with (modulus, exponent) big-endian bytes. returns output length or -1
+int sw_rsa_pkcs1(const uint8_t *mod, size_t mn, const uint8_t *ex, size_t en, const uint8_t *in, size_t inn, uint8_t *out, size_t outn);
+void sw_sha1(const void *p, size_t n, uint8_t out[20]);
+
+// ---- Steam account + game content (sg.inc, part of sw.c) ----
+// begin password login. *guard bits: 1 = Steam app code, 2 = email code, 4 = approve in Steam app. 0 = nothing needed
+int sg_auth_begin(const char *user, const char *pass, int *guard, char *hint, size_t hn, char *err, size_t errn);
+int sg_auth_code(const char *code, int email, char *err, size_t errn);
+// blocks until Steam hands out tokens (after code / app approval), up to 5 min
+int sg_auth_poll(char *refresh, size_t rn, char *acct, size_t an, volatile int *cancel, char *err, size_t errn);
+typedef struct { uint64_t total, checked, downloaded, bad_chunks, files; } sg_stats;
+// install / update / verify GMod content (depots 4001+4002) into root/{garrysmod,sourceengine,platform}
+// returns 0 ok, -1 error, -2 saved login expired (log in again)
+int sg_game_sync(const char *root, const char *acct, const char *refresh, int verify, sw_progress *p, sg_stats *st, char *err, size_t errn);

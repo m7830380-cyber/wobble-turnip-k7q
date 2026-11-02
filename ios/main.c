@@ -234,7 +234,7 @@ extern int so_jit_mode(void), so_jit_traced(void);
 static int jit_enabled(void) { unsigned int f = 0; csops(getpid(), 0, &f, sizeof f);
   if (!(f & 0x10000000)) return 0;
   return so_jit_mode() == 1 || so_jit_traced(); /* TXM (iOS 26, A15+) needs StikDebug still attached */ }
-static void wait_for_jit(void) {
+__attribute__((unused)) static void wait_for_jit(void) {
   while (!jit_enabled()) {
     const SDL_MessageBoxButtonData btn[] = {{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Retry"}, {0, 0, "Quit"}};
     SDL_MessageBoxData d = {SDL_MESSAGEBOX_WARNING, NULL, "GMod", "JIT is not enabled.\n\nLaunch with JIT: TrollStore -> long-press GMod -> Open with JIT, or StikDebug.\niOS 26: in StikDebug long-press GMod -> Assign Script -> universal.js, then launch.\nThen tap Retry.", 2, btn, NULL};
@@ -242,7 +242,8 @@ static void wait_for_jit(void) {
   }
 }
 
-static void wait_for_content(void) {
+int ios_jit_ok(void) { return jit_enabled(); } // live: StikDebug can attach while the launcher is open
+__attribute__((unused)) static void wait_for_content(void) {
   wait_for_jit();
   while (!exists(g_docs, "garrysmod/garrysmod_dir.vpk") && !exists(g_docs, "garrysmod/gameinfo.txt")) {
     char msg[2048];
@@ -368,18 +369,18 @@ int main(int argc, char **argv) {
     sigaction(SIGSEGV, &sa, NULL); sigaction(SIGBUS, &sa, NULL); sigaction(SIGILL, &sa, NULL); }
   SDL_Init(SDL_INIT_VIDEO);  // needed for message box; engine re-inits
   { extern void ios_kbfix_install(void); ios_kbfix_install(); }
-  wait_for_content();
+  fprintf(stderr, "[status] jit %d\n", ios_jit_ok()); // launcher shows it and blocks play without it
 
   snprintf(lib, sizeof lib, "%s/lib", g_bundle);
   /* iOS 26 TXM: do every debugger request NOW, while StikDebug is still in the foreground-adjacent state
      (it gets suspended while the user sits in the launcher -> a later request would hang forever), then detach */
   so_skip("libSDL2.so"); so_skip("libopenxr_loader.so");
-  so_jit_reserve_dir(lib);
-  { extern void so_jit_detach(void); so_jit_detach(); }
+  int reserved = 0; if (ios_jit_ok()) { so_jit_reserve_dir(lib); extern void so_jit_detach(void); so_jit_detach(); reserved = 1; }
   snprintf(rt, sizeof rt, "%s/rt", g_bundle);
   char ur[1200]; snprintf(ur, sizeof ur, "%s/../Library/user", g_docs); mkdir(ur, 0755); { char rp[1200]; if (realpath(ur, rp)) snprintf(ur, sizeof ur, "%s", rp); } snprintf(wr, sizeof wr, "%s/garrysmod", ur); mkdir(wr, 0755); { char rp[1200]; if (realpath(wr, rp)) snprintf(wr, sizeof wr, "%s", rp); }
   { extern void workshop_set_root(const char *); workshop_set_root(g_docs); }
   { extern char **ios_run_launcher(const char *, const char *, int *); g_av = ios_run_launcher(g_docs, wr, &g_ac); }
+  if (!reserved) { fprintf(stderr, "[jit] enabled while in the launcher, preparing now\n"); so_jit_reserve_dir(lib); extern void so_jit_detach(void); so_jit_detach(); }
   snprintf(lnk, sizeof lnk, "%s/garrysmod/runtime", g_docs);
   unlink(lnk); symlink(rt, lnk);  // bundle path changes per install
   { // Windows GMod has no linux_fonts; engine (FreeType) needs them under platform/resource/linux_fonts

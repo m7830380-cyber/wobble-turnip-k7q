@@ -2,6 +2,9 @@
 #include "sw.h"
 #include <curl/curl.h>
 #include <openssl/evp.h>
+#include <openssl/rsa.h>
+#include <openssl/bn.h>
+#include <openssl/sha.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,12 +49,44 @@ int sw_aes_cbc_dec(const uint8_t key[32], const uint8_t iv[16], const uint8_t *i
   EVP_CIPHER_CTX *x = EVP_CIPHER_CTX_new(); int l, l2; EVP_DecryptInit_ex(x, EVP_aes_256_cbc(), 0, key, iv); EVP_CIPHER_CTX_set_padding(x, 0);
   int r = EVP_DecryptUpdate(x, out, &l, in, (int)n) && EVP_DecryptFinal_ex(x, out + l, &l2); EVP_CIPHER_CTX_free(x); return r ? 0 : -1;
 }
+
+typedef struct { int xe; } hh;
+static size_t hcb(char *d, size_t s, size_t k, void *u) { hh *h = u; if (!strncasecmp(d, "x-eresult:", 10)) h->xe = atoi(d + 10); return s * k; }
+int sw_http_req(const char *method, const char *url, const void *body, size_t bn, const char *ctype, uint8_t **out, size_t *n, int *xeres) {
+  CURL *c = curl_easy_init(); hb h = {0}; hh x = {1}; struct curl_slist *hl = NULL;
+  curl_easy_setopt(c, CURLOPT_URL, url); curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, wcb); curl_easy_setopt(c, CURLOPT_WRITEDATA, &h);
+  curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, hcb); curl_easy_setopt(c, CURLOPT_HEADERDATA, &x); curl_easy_setopt(c, CURLOPT_TIMEOUT, 25L);
+  if (body) { curl_easy_setopt(c, CURLOPT_POSTFIELDS, body); curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, (long)bn);
+    if (ctype) { char t[200]; snprintf(t, sizeof t, "Content-Type: %s", ctype); hl = curl_slist_append(hl, t); curl_easy_setopt(c, CURLOPT_HTTPHEADER, hl); } }
+  curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, method);
+  CURLcode r = curl_easy_perform(c); long st = 0; curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &st); curl_easy_cleanup(c); curl_slist_free_all(hl);
+  if (xeres) *xeres = x.xe; if (r) { free(h.p); return -1; }
+  h.p = realloc(h.p, h.n + 1); h.p[h.n] = 0; *out = h.p; *n = h.n; return (int)st;
+}
+int sw_rsa_pkcs1(const uint8_t *mod, size_t mn, const uint8_t *ex, size_t en, const uint8_t *in, size_t inn, uint8_t *out, size_t outn) {
+  RSA *k = RSA_new(); RSA_set0_key(k, BN_bin2bn(mod, (int)mn, 0), BN_bin2bn(ex, (int)en, 0), 0);
+  if ((size_t)RSA_size(k) > outn) { RSA_free(k); return -1; }
+  int r = RSA_public_encrypt((int)inn, in, out, k, RSA_PKCS1_PADDING); RSA_free(k); return r;
+}
+void sw_sha1(const void *p, size_t n, uint8_t out[20]) { SHA1(p, n, out); }
 #ifdef SW_TEST_MAIN
 static void st(void *u, const char *t, uint64_t d, uint64_t tot) { (void)u; static time_t last; if (time(NULL) != last || d == tot) { last = time(NULL); fprintf(stderr, "  %s %llu/%llu\n", t, (unsigned long long)d, (unsigned long long)tot); } }
 int main(int argc, char **argv) {
   curl_global_init(CURL_GLOBAL_ALL); char err[512]; uint64_t *ids; int n; sw_progress p = {st, 0, 0};
   if (sw_resolve(argv[2], &ids, &n, &p, err, sizeof err)) return 1;
   for (int i = 0; i < n; i++) { fprintf(stderr, "item %llu\n", (unsigned long long)ids[i]); if (sw_install(argv[1], ids[i], 0, &p, err, sizeof err)) fprintf(stderr, "FAIL %s\n", err); }
+  return 0;
+}
+#endif
+#ifdef SG_TEST_MAIN
+static void st2(void *u, const char *t, uint64_t d, uint64_t tot) { (void)u; static time_t last; if (time(NULL) != last) { last = time(NULL); fprintf(stderr, "  %s %llu/%llu\n", t, (unsigned long long)d, (unsigned long long)tot); } }
+int main(int argc, char **argv) {
+  curl_global_init(CURL_GLOBAL_ALL); char err[512]; int g; char hint[128];
+  if (argc > 2 && !strcmp(argv[1], "login")) { // login user pass
+    if (sg_auth_begin(argv[2], argv[3], &g, hint, sizeof hint, err, sizeof err)) { printf("FAIL %s\n", err); return 1; }
+    printf("guard %d hint %s\n", g, hint); return 0; }
+  if (argc > 4 && !strcmp(argv[1], "dl")) { extern int sg_test_dl(const char *, int, char *, size_t); return sg_test_dl(argv[2], atoi(argv[3]), err, sizeof err); }
+  if (argc > 1 && !strcmp(argv[1], "pics")) { extern int sg_test_pics(char *, size_t); return sg_test_pics(err, sizeof err); }
   return 0;
 }
 #endif

@@ -34,8 +34,8 @@ jobs:
           $CC -fobjc-arc -c ios/touchedit.m -o touchedit.o; $CC -fobjc-arc -c ios/lan.m -o lan.o; $CC -fobjc-arc -c ios/kbfix.m -o kbfix.o
           for f in sw joinws; do $CC -c ios/steam/$f.c -o st_$f.o; done
           $CC -c ios/dec/LzmaDec.c -o lzmadec.o; $CC -O2 -c ios/dec/zstddeclib.c -o zstddec.o
-          $CC -fobjc-arc -c ios/steam/net_ios.m -o st_net.o; $CC -fobjc-arc -c ios/steam/workshop_ui.m -o st_ui.o
-          $CC -o gmod *.o -F$FW -framework SDL2 -framework Foundation -framework UIKit -framework Metal -framework QuartzCore -framework WebKit -framework CoreGraphics -framework UniformTypeIdentifiers -lz -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path/Frameworks/SDL2.framework -Wl,-rpath,@executable_path/Frameworks/libEGL.framework -Wl,-rpath,@executable_path/Frameworks/libGLESv2.framework
+          $CC -fobjc-arc -c ios/steam/net_ios.m -o st_net.o; $CC -fobjc-arc -c ios/steam/workshop_ui.m -o st_ui.o; $CC -fobjc-arc -c ios/steam/gameinst.m -o st_gi.o
+          $CC -o gmod *.o -F$FW -framework SDL2 -framework Foundation -framework UIKit -framework Metal -framework QuartzCore -framework WebKit -framework CoreGraphics -framework UniformTypeIdentifiers -framework Security -lz -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path/Frameworks/SDL2.framework -Wl,-rpath,@executable_path/Frameworks/libEGL.framework -Wl,-rpath,@executable_path/Frameworks/libGLESv2.framework
       - name: Package
         run: |
           APP=Payload/GMod.app; mkdir -p $APP/Frameworks $APP/lib $APP/rt

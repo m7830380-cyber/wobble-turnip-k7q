@@ -52,6 +52,7 @@ static void pb_str(pbr *r, char *out, size_t on) { size_t n = r->dn < on - 1 ? r
 // ---------------- CM connection ----------------
 typedef struct { sw_ws *ws; uint64_t sid; int32_t sess; uint64_t job; time_t last; } cm_t;
 static cm_t g_cm;
+static char g_user[128], g_utok[4096]; static int g_logon_eres;
 
 typedef struct { uint32_t emsg; uint64_t jobt; int eres; uint8_t *body; size_t bn; uint8_t *raw; } cmmsg;
 #define QMAX 64
@@ -119,15 +120,28 @@ static int cm_connect(char *err, size_t errn, volatile int *cancel) {
     char url[300]; snprintf(url, sizeof url, "wss://%.*s/cmsocket/", (int)(q - p), p); p = q; tries++;
     g_cm.ws = sw_ws_open(url, e2, sizeof e2);
     if (!g_cm.ws) { sw_log("[steam] %s: %s", url, e2); continue; }
-    g_cm.sid = (1ULL << 56) | (10ULL << 52); g_cm.sess = 0; g_cm.job = 1;
-    buf b = {0}; fvar(&b, 1, 65580); fvar(&b, 7, 16); fvar(&b, 5, 1771); // protocol, os, package
-    cm_send(5514, &b, NULL); free(b.p);
+    g_cm.sess = 0; g_cm.job = 1; int acct = g_utok[0] != 0;
+    buf b = {0};
+    if (acct) { // account logon with the refresh token (Madeira SteamSession.loginWithToken)
+      g_cm.sid = (1ULL << 56) | (1ULL << 52) | (1ULL << 32);
+      buf hl = {0}; fvar(&hl, 1, 65580); cm_send(4006, &hl, NULL); free(hl.p); // ClientHello
+      fvar(&b, 1, 65580); fvar(&b, 5, 1771); fstr(&b, 6, "english"); fvar(&b, 7, (uint32_t)-102); fvar(&b, 8, 1);
+      fstr(&b, 50, g_user); fstr(&b, 96, "GMod iOS"); fvar(&b, 102, 1); fstr(&b, 108, g_utok);
+      cm_send(5514, &b, NULL);
+    } else {
+      g_cm.sid = (1ULL << 56) | (10ULL << 52);
+      fvar(&b, 1, 65580); fvar(&b, 7, 16); fvar(&b, 5, 1771); // protocol, os, package
+      cm_send(5514, &b, NULL);
+    }
+    free(b.p);
     cmmsg m; int r = cm_wait(751, 0, &m, 20, cancel);
     if (r) { cm_close(); snprintf(e2, sizeof e2, "logon timeout"); continue; }
     pbr rr; pb_init(&rr, m.body, m.bn); int eres = 2; while (pb_next(&rr)) if (rr.f == 1) eres = (int)rr.v;
     free(m.raw);
-    if (eres != 1) { cm_close(); snprintf(e2, sizeof e2, "anonymous logon refused (EResult %d)", eres); continue; }
-    sw_log("[steam] connected %s anon sid %llx", url, (unsigned long long)g_cm.sid); free(s); return 0;
+    g_logon_eres = eres;
+    if (eres != 1) { cm_close(); if (acct && (eres == 5 || eres == 15 || eres == 18)) { free(s); ERR("Steam login expired, log in again (EResult %d)", eres); }
+      snprintf(e2, sizeof e2, "%s logon refused (EResult %d)", acct ? "account" : "anonymous", eres); continue; }
+    sw_log("[steam] connected %s %s sid %llx", url, g_utok[0] ? "account" : "anon", (unsigned long long)g_cm.sid); free(s); return 0;
   }
   free(s); ERR("Could not connect to Steam: %s", e2[0] ? e2 : "no servers");
 }
@@ -527,3 +541,5 @@ int sw_install(const char *root, uint64_t id, int join, sw_progress *p, char *er
   sw_log("[steam] installed %llu -> %s (%d gma, crc %u)", (unsigned long long)id, dst, ng, gi.crc);
   return 0;
 }
+
+#include "sg.inc"
