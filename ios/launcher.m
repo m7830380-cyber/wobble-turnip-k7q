@@ -136,7 +136,7 @@ static NSMutableArray<NSString *> *g_args;
   [self toggle:c text:@"Auto exposure (HDR)" key:@"autoexposure" def:YES];
   [self toggle:c text:@"Physgun halo (if shit happens)" key:@"physgun_halo" def:YES];
   [self toggle:c text:@"Simplified physgun glow (dont turn on unless issues)" key:@"fast_halo" def:NO];
-  [self toggle:c text:@"sRGB fix (leave on)" key:@"srgb_fix3" def:YES];
+  [self toggle:c text:@"sRGB fix (leave off unless HDR)" key:@"srgb_fix4" def:NO];
 
   // Controls
   c = (UIStackView *)[self card:@"CONTROLS"];
@@ -360,7 +360,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     else if ([action isEqual:@"load"]) [a addObjectsFromArray:@[@"+load", target]];
     else if ([action isEqual:@"connect"]) [a addObjectsFromArray:@[@"+connect", target]];
   }
-  setenv("GMOD_SRGB_FIX", bv(@"srgb_fix3", YES) ? "1" : "0", 1);
+  setenv("GMOD_SRGB_FIX", bv(@"srgb_fix4", NO) ? "1" : "0", 1);
   g_done = 1;
 }
 
