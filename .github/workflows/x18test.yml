@@ -9,6 +9,6 @@ jobs:
           pip install capstone pyelftools >/dev/null
           curl -sL -o g.apk https://github.com/${{ github.repository }}/releases/download/apk31/g31.apk
           mkdir apk && (cd apk && unzip -q ../g.apk 'lib/arm64-v8a/*')
-          python3 tools/fix_x18.py apk/lib/arm64-v8a/*.so 2>&1 | tee x18.log | rg -v 'no free reg' || true
-          echo "remaining no-free:"; rg -c 'no free reg' x18.log || true
-          rg 'no free reg' x18.log | head -40 || true
+          python3 tools/fix_x18.py apk/lib/arm64-v8a/*.so 2>&1 | tee x18.log | grep -v "no free reg" || true
+          echo "remaining no-free:"; grep -c "no free reg" x18.log || true
+          grep "no free reg\|cannot" x18.log | head -40 || true
