@@ -69,10 +69,11 @@ static void finish_login(UIViewController *vc, void (^done)(BOOL)) {
   dispatch_async(dispatch_get_global_queue(0, 0), ^{
     char rt[4096] = "", acct[128] = "", err[512] = "";
     int r = sg_auth_poll(rt, sizeof rt, acct, sizeof acct, &g_lcancel, err, sizeof err);
+    NSString *E = @(err), *RT = @(rt), *AC = @(acct); memset(rt, 0, sizeof rt);
     dispatch_async(dispatch_get_main_queue(), ^{
       if (vc.presentedViewController) [vc dismissViewControllerAnimated:NO completion:nil];
-      if (r) { if (!g_lcancel) say(vc, @"Login failed", @(err)); done(NO); return; }
-      kc_set(@(rt)); [UD setObject:@(acct) forKey:@"steam_account"]; memset(rt, 0, sizeof rt); done(YES);
+      if (r) { if (!g_lcancel) say(vc, @"Login failed", E); done(NO); return; }
+      kc_set(RT); [UD setObject:AC forKey:@"steam_account"]; done(YES);
     });
   });
 }
@@ -92,7 +93,8 @@ static void ask_code(UIViewController *vc, int guard, NSString *hint, void (^don
       [vc presentViewController:w animated:YES completion:nil];
       dispatch_async(dispatch_get_global_queue(0, 0), ^{
         char err[512] = ""; int r = sg_auth_code(code.UTF8String, email, err, sizeof err);
-        if (r) { g_lcancel = 1; dispatch_async(dispatch_get_main_queue(), ^{ [vc dismissViewControllerAnimated:NO completion:^{ say(vc, @"Steam Guard", @(err)); }]; done(NO); }); }
+        NSString *E = @(err);
+        if (r) { g_lcancel = 1; dispatch_async(dispatch_get_main_queue(), ^{ [vc dismissViewControllerAnimated:NO completion:^{ say(vc, @"Steam Guard", E); }]; done(NO); }); }
       });
     }]];
   }
@@ -114,14 +116,15 @@ void gi_login(UIViewController *vc, void (^done)(BOOL)) {
     dispatch_async(dispatch_get_global_queue(0, 0), ^{
       int guard = 0; char hint[256] = "", err[512] = "";
       int r = sg_auth_begin(u.UTF8String, p.UTF8String, &guard, hint, sizeof hint, err, sizeof err);
+      NSString *E = @(err), *H = @(hint);
       dispatch_async(dispatch_get_main_queue(), ^{
         [vc dismissViewControllerAnimated:NO completion:^{
-          if (r) { say(vc, @"Login failed", @(err)); done(NO); return; }
+          if (r) { say(vc, @"Login failed", E); done(NO); return; }
           if (!guard) {
             UIAlertController *w2 = [UIAlertController alertControllerWithTitle:@"Logging in…" message:nil preferredStyle:1];
             [w2 addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:^(UIAlertAction *y) { g_lcancel = 1; }]];
             [vc presentViewController:w2 animated:YES completion:nil]; finish_login(vc, done);
-          } else ask_code(vc, guard, @(hint), done);
+          } else ask_code(vc, guard, H, done);
         }];
       });
     });
@@ -183,12 +186,13 @@ void gi_sync(UIViewController *parent, NSString *root, BOOL verify, void (^done)
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     sw_progress p = {gi_status, ud, &g_icancel}; sg_stats st; char err[512] = "";
     int r = sg_game_sync(root.UTF8String, acct.UTF8String, tok.UTF8String, verify, &p, &st, err, sizeof err);
+    NSString *E = @(err);
     dispatch_async(dispatch_get_main_queue(), ^{
       free(ud); UIApplication.sharedApplication.idleTimerDisabled = NO;
       if (bt != UIBackgroundTaskInvalid) { [UIApplication.sharedApplication endBackgroundTask:bt]; bt = UIBackgroundTaskInvalid; }
       [parent dismissViewControllerAnimated:YES completion:^{
         if (r == -2) { gi_logout(); say(parent, @"Steam login expired", @"Log in again o algo"); if (done) done(NO); return; }
-        if (r) { if (!g_icancel) say(parent, verify ? @"Verify failed" : @"Install failed", @(err)); if (done) done(NO); return; }
+        if (r) { if (!g_icancel) say(parent, verify ? @"Verify failed" : @"Install failed", E); if (done) done(NO); return; }
         NSString *m = verify ? [NSString stringWithFormat:@"%llu files checked, %llu broken pieces fixed (%.1f MB redownloaded)", st.files, st.bad_chunks, st.downloaded / 1e6]
                              : [NSString stringWithFormat:@"%llu files, %.2f GB downloaded. Go play", st.files, st.downloaded / 1e9];
         say(parent, verify ? @"All good" : @"GMod installed", m); if (done) done(YES);
