@@ -456,6 +456,16 @@ int main(int argc, char **argv) {
     }
   }
   so_init_all();
+  { /* libshaderapidx9 0.1.31: the dynamic index buffer is 32768 indices; big addon meshes ask for more
+       ("too many indices for index buffer (32802>32768)") -> tier0 Error() -> the game exits. Make it 65536. */
+    so_module *sa = so_find("libshaderapidx9.so");
+    if (sa) { uint32_t *ins = (uint32_t *)(sa->base + 0x460a8);
+      extern void *so_wptr(void *); extern int so_is_mirrored(void *);
+      if (*ins == 0x52900008) { uintptr_t pg = (uintptr_t)ins & ~(uintptr_t)16383; int a = 0, b = 0;
+        if (so_is_mirrored(ins)) *(uint32_t *)so_wptr(ins) = 0x52a00028;  /* mov w8, #0x10000 */
+        else { a = mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE); *ins = 0x52a00028; b = mprotect((void *)pg, 16384, PROT_READ | PROT_EXEC); }
+        sys_icache_invalidate(ins, 4); fprintf(stderr, "[ib] dynamic index buffer 32768 -> 65536 (%d %d)\n", a, b); }
+      else fprintf(stderr, "[ib] patch: unexpected insn %08x\n", *ins); } }
   int (*jni_onload)(void *, void *) = so_sym(m, "JNI_OnLoad");
   if (jni_onload) jni_onload(jni_vm(), NULL);
   int (*lma)(int, char **) = so_sym(m, "LauncherMainAndroid");
