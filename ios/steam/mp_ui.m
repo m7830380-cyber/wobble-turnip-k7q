@@ -195,7 +195,16 @@ static void line_hook(const char *l) {
     sm_set_server(a, port); sw_log("[mp] engine: joining %s:%d", a, port); return;
   }
   if (strstr(l, "Host_Disconnect( bShowMainMenu=1")) { sm_set_host(0); g_on_server = 0; sw_log("[mp] engine: back to menu"); }
-  if (strstr(l, "Connected to ")) g_on_server = 1;
+  /* Sandbox's shared GM:PlayerNoClip returns GetConVarNumber("sbox_noclip") > 0, but the client never gets the sandbox.txt
+     cvars ("SetConVar: No such cvar (sbox_...)"), so client prediction refuses noclip while the server allows it -> rubber-banding.
+     setinfo creates the missing cvars on the client with the server's value (sbox_noclip default 1). */
+  if (strstr(l, "Connected to ")) { g_on_server = 1; engine_cmd(@"setinfo sbox_noclip 1"); sw_log("[mp] client sbox_noclip = 1"); }
+  if ((k = strstr(l, "SetConVar: No such cvar ( "))) {
+    char nm[64], v[64]; if (sscanf(k + 26, "%63s set to %63[^)]", nm, v) == 2 && !strncmp(nm, "sbox_", 5)) {
+      int e = (int)strlen(v); while (e && v[e - 1] == ' ') v[--e] = 0;
+      engine_cmd([NSString stringWithFormat:@"setinfo %s \"%s\"", nm, v]); sw_log("[mp] client %s = %s", nm, v);
+    }
+  }
   /* libclient 0.1.31 0x8c36d8: commands the client doesn't know should go to the server ("cmd x"),
      but its IsConnected check fails here, so it prints "Unknown command: noclip" and drops it. Forward it ourselves. */
   if (g_on_server && (k = strstr(l, "Unknown command: ")) && !strstr(l, "gmod_ios_")) {
