@@ -543,3 +543,4 @@ int sw_install(const char *root, uint64_t id, int join, sw_progress *p, char *er
 }
 
 #include "sg.inc"
+#include "smp.inc"

@@ -55,3 +55,33 @@ typedef struct { uint64_t total, checked, downloaded, bad_chunks, files; } sg_st
 // install / update / verify GMod content (depots 4001+4002) into root/{garrysmod,sourceengine,platform}
 // returns 0 ok, -1 error, -2 saved login expired (log in again)
 int sg_game_sync(const char *root, const char *acct, const char *refresh, int verify, sw_progress *p, sg_stats *st, char *err, size_t errn);
+
+// ---- Steam multiplayer session (smp.inc, part of sw.c) ----
+typedef struct { uint64_t sid; char name[64]; int state; uint32_t app; char game[64]; char addr[64]; } sm_friend;
+void sm_start(const char *acct, const char *refresh);   // NULL acct = anonymous; starts/keeps a background session
+void sm_stop(void);
+int sm_state(char *msg, size_t mn);                      // 0 off, 1 connecting, 2 online, -1 login expired
+uint64_t sm_steamid(void);
+void sm_set_playing(int on);
+void sm_set_host(int port);
+int sm_server(char *o, size_t on);
+void sm_auth_request(const char *addr, int port, uint64_t server_sid, int secure);
+int sm_auth_state(void);
+int sm_auth_error(char *o, size_t on);
+uint64_t sm_auth_steamid(void);
+int sm_auth_cookie(uint8_t *o, size_t on, uint32_t *crc);
+void sm_auth_cancel(void);
+int sm_dir_start(void);
+int sm_dir_poll(int id, char **out, int max);
+void sm_dir_cancel(int id);
+int sm_persona_available(void);
+void sm_persona_request(uint64_t sid, int full);
+uint64_t sm_persona_serial(void);
+int sm_persona_changed(uint64_t *o, int max);
+int sm_persona_name(uint64_t sid, char *o, size_t on, int *ver);
+int sm_relationship(uint64_t sid);
+int sm_avatar(uint64_t sid, int size, uint8_t *out, int *ver);
+int sm_friends(sm_friend *o, int max);
+int sm_invite(uint64_t to, const char *connect);
+int sm_take_invite(uint64_t *from, char *name, size_t nn, char *addr, size_t an, char *raw, size_t rn);
+extern unsigned char *(*sm_decode_image)(const uint8_t *d, size_t n, int size); // RGBA size*size, malloc'd

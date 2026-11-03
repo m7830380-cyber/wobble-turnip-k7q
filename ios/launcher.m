@@ -129,6 +129,11 @@ static NSMutableArray<NSString *> *g_args;
   }
   [self.stack addArrangedSubview:mp];
 
+  UIButton *fr = [self button:@"Steam friends + invites" action:@selector(openFriends)];
+  fr.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; fr.layer.cornerRadius = 12; [fr.heightAnchor constraintEqualToConstant:46].active = YES;
+  [self.stack addArrangedSubview:fr];
+  { extern void mp_launcher_attach(void (^)(NSString *)); mp_launcher_attach(^(NSString *addr) { [self launch:@"connect" target:addr]; }); }
+
   UIButton *ws = [self button:@"Steam Workshop (browser based for now)" action:@selector(openWorkshop)];
   ws.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; ws.layer.cornerRadius = 12; [ws.heightAnchor constraintEqualToConstant:46].active = YES;
   [self.stack addArrangedSubview:ws];
@@ -312,8 +317,9 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
 - (void)mpTap:(UIButton *)b {
   NSString *act = b.accessibilityIdentifier;
   if ([act isEqual:@"host"]) {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Host LAN game" message:@"Starts the selected map with 8 slots on LAN." preferredStyle:1];
-    [a addAction:[UIAlertAction actionWithTitle:@"Host" style:0 handler:^(UIAlertAction *x) { [self launch:@"host" target:[D stringForKey:@"gmod_map"] ?: @"gm_construct"]; }]];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Host a game" message:@"8 slots on the selected map.\nLAN = same Wi-Fi only.\nInternet = Steam friends can join via invite, but your router has to let UDP 27015 in (port forward o algo), otherwise only LAN works" preferredStyle:1];
+    [a addAction:[UIAlertAction actionWithTitle:@"Host LAN" style:0 handler:^(UIAlertAction *x) { [D setBool:NO forKey:@"host_inet"]; [self launch:@"host" target:[D stringForKey:@"gmod_map"] ?: @"gm_construct"]; }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Host internet (Steam friends)" style:0 handler:^(UIAlertAction *x) { [D setBool:YES forKey:@"host_inet"]; [self launch:@"host" target:[D stringForKey:@"gmod_map"] ?: @"gm_construct"]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; [self presentViewController:a animated:YES completion:nil]; return;
   }
   if ([act isEqual:@"load"]) {
@@ -339,6 +345,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
   [self ensureTouchDefaults]; touch_editor_present(self, [self writeRoot], NO, nil); }
 - (void)openCustomButtons { extern void cb_present(UIViewController *, void (^)(void)); cb_present(self, nil); }
 - (void)ensureTouchDefaults { [NSFileManager.defaultManager createDirectoryAtPath:[[self writeRoot] stringByAppendingPathComponent:@"cfg"] withIntermediateDirectories:YES attributes:nil error:nil]; }
+- (void)openFriends { extern void mp_friends_present(UIViewController *); mp_friends_present(self); }
 - (void)openWorkshop { extern void workshop_present(UIViewController *); workshop_present(self); }
 - (void)refreshStatus {
   extern int ios_jit_ok(void); extern BOOL gi_mem_entitled(void); extern int gi_mem_limit_mb(void);
@@ -349,7 +356,10 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
   self.stMem.text = [NSString stringWithFormat:@"Memory Entitlement: %@  (limit ~%d MB)", m ? @"True" : @"False", gi_mem_limit_mb()]; self.stMem.textColor = m ? ok : meh;
   self.stContent.text = [NSString stringWithFormat:@"Game Content: %@", miss ? [NSString stringWithFormat:@"False  (missing %@)", miss] : @"True"]; self.stContent.textColor = miss ? bad : ok;
   NSString *u = gi_steam_user();
-  self.stSteam.text = u ? [NSString stringWithFormat:@"Steam: %@", u] : @"Steam: not logged in (only for downloading the game)";
+  { extern void mp_boot(void); mp_boot(); }
+  { extern int sm_state(char *, size_t); char em[300] = ""; int ss = u ? sm_state(em, sizeof em) : 0;
+    self.stSteam.text = !u ? @"Steam: not logged in (needed for downloads, friends, PC servers)"
+      : [NSString stringWithFormat:@"Steam: %@ · %@", u, ss == 2 ? @"online" : ss == 1 ? @"connecting…" : ss == -1 ? @"login expired, log in again" : em[0] ? @(em) : @"offline"]; }
   [self.acctBtn setTitle:u ? @"Log out" : @"Steam login" forState:0];
   [self.instBtn setTitle:miss ? @"Get GMod" : @"Update GMod" forState:0];
   self.verifyBtn.enabled = !miss; self.verifyBtn.alpha = miss ? 0.4 : 1;
@@ -417,7 +427,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
   BOOL hasMap = [user containsObject:@"+map"] || [user containsObject:@"+load"] || [user containsObject:@"+connect"];
   if ([action isEqual:@"host"] && !hasMap) {
     if (![user containsObject:@"+maxplayers"]) [a addObjectsFromArray:@[@"+maxplayers", @"8"]];
-    if (![user containsObject:@"+sv_lan"]) [a addObjectsFromArray:@[@"+sv_lan", @"1"]];
+    if (![user containsObject:@"+sv_lan"]) [a addObjectsFromArray:@[@"+sv_lan", [D boolForKey:@"host_inet"] ? @"0" : @"1"]];
   }
   [a addObjectsFromArray:user];
   if (!hasMap) {
@@ -426,6 +436,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     else if ([action isEqual:@"connect"]) [a addObjectsFromArray:@[@"+connect", target]];
   }
   setenv("GMOD_SRGB_FIX", bv(@"srgb_fix4", NO) ? "1" : "0", 1);
+  { extern void mp_game_start(int); mp_game_start([action isEqual:@"host"] ? 27015 : 0); }
   g_done = 1;
 }
 

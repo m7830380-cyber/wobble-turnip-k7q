@@ -86,6 +86,7 @@ int main(int argc, char **argv) {
     if (sg_auth_begin(argv[2], argv[3], &g, hint, sizeof hint, err, sizeof err)) { printf("FAIL %s\n", err); return 1; }
     printf("guard %d hint %s\n", g, hint); return 0; }
   if (argc > 4 && !strcmp(argv[1], "dl")) { extern int sg_test_dl(const char *, int, char *, size_t); return sg_test_dl(argv[2], atoi(argv[3]), err, sizeof err); }
+  if (argc > 1 && !strcmp(argv[1], "mp")) { extern int sm_test(const char *, const char *); return sm_test(argc > 3 ? argv[2] : NULL, argc > 3 ? argv[3] : NULL); }
   if (argc > 1 && !strcmp(argv[1], "pics")) { extern int sg_test_pics(char *, size_t); return sg_test_pics(err, sizeof err); }
   return 0;
 }

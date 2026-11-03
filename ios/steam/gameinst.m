@@ -29,7 +29,8 @@ static void kc_set(NSString *v) {
 }
 #define UD [NSUserDefaults standardUserDefaults]
 NSString *gi_steam_user(void) { return kc_get() ? [UD stringForKey:@"steam_account"] : nil; }
-void gi_logout(void) { kc_del(); [UD removeObjectForKey:@"steam_account"]; }
+NSString *gi_steam_token(void) { return kc_get(); }
+void gi_logout(void) { kc_del(); [UD removeObjectForKey:@"steam_account"]; extern void mp_boot(void); mp_boot(); }
 
 // ---------------- status checks ----------------
 #include <dlfcn.h>

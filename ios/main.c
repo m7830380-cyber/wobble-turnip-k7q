@@ -410,6 +410,7 @@ int main(int argc, char **argv) {
   { extern void webview_init(void); webview_init(); }
   { extern void touchedit_jni_init(void); touchedit_jni_init(); }
   { extern void workshop_jni_init(void); workshop_jni_init(); }
+  { extern void mp_jni_init(void); mp_jni_init(); }
   bionic_gl_proc = ios_gl_proc;
   so_set_libdir(lib);
   so_skip("libSDL2.so");
