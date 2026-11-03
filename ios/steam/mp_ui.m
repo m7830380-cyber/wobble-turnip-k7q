@@ -178,6 +178,7 @@ static void cmd_hook(const char *c) {
   dispatch_async(dispatch_get_main_queue(), ^{ UIViewController *v = top_vc(); if (v && ![v isKindOfClass:UINavigationController.class]) { extern void SDL_StopTextInput(void); SDL_StopTextInput(); mp_friends_present(v); } });
 }
 // Steam presence follows what the engine actually does (Play -> multiplayer map, in-game "create game", connect, disconnect)
+static int g_on_server;
 static void line_hook(const char *l) {
   const char *k;
   if ((k = strstr(l, "Network: IP ")) && strstr(k, "mode ")) {
@@ -192,7 +193,14 @@ static void line_hook(const char *l) {
     char *c = strrchr(a, ':'); int port = 27015; if (c) { port = atoi(c + 1); *c = 0; }
     sm_set_server(a, port); sw_log("[mp] engine: joining %s:%d", a, port); return;
   }
-  if (strstr(l, "Host_Disconnect( bShowMainMenu=1")) { sm_set_host(0); sw_log("[mp] engine: back to menu"); }
+  if (strstr(l, "Host_Disconnect( bShowMainMenu=1")) { sm_set_host(0); g_on_server = 0; sw_log("[mp] engine: back to menu"); }
+  if (strstr(l, "Connected to ")) g_on_server = 1;
+  /* libclient 0.1.31 0x8c36d8: commands the client doesn't know should go to the server ("cmd x"),
+     but its IsConnected check fails here, so it prints "Unknown command: noclip" and drops it. Forward it ourselves. */
+  if (g_on_server && (k = strstr(l, "Unknown command: ")) && !strstr(l, "gmod_ios_")) {
+    char c[64]; k += 17; int n = 0; while (k[n] && k[n] != '\n' && k[n] != ' ' && k[n] != '"' && k[n] != ';' && n < 63) n++; c[n] = 0; memcpy(c, k, n);
+    if (n > 0) { sw_log("[mp] forwarding '%s' to the server", c); engine_cmd([NSString stringWithFormat:@"cmd %s", c]); }
+  }
 }
 // called right before the engine starts
 void mp_game_start(int host_port) {
