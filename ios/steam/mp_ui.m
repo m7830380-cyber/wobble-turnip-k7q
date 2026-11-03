@@ -171,32 +171,18 @@ static void start_invite_timer(void) {
 }
 void mp_launcher_attach(void (^join)(NSString *addr)) { g_launcher_join = join; mp_boot(); start_invite_timer(); }
 
-// ---------- in game ----------
-@interface MPBtn : NSObject @end
-@implementation MPBtn
-+ (void)tap { UIViewController *v = top_vc(); if (v) mp_friends_present(v); }
-@end
-static void add_ingame_button(void) {
-  UIViewController *v = top_vc(); UIView *root = v.view.window ?: v.view;
-  if (!root) { dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ add_ingame_button(); }); return; }
-  if ([root viewWithTag:0x5f5f]) return;
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem]; b.tag = 0x5f5f;
-  [b setImage:[UIImage systemImageNamed:@"person.2.fill"] forState:0]; b.tintColor = [UIColor colorWithWhite:1 alpha:0.75];
-  b.backgroundColor = [UIColor colorWithWhite:0 alpha:0.28]; b.layer.cornerRadius = 17;
-  CGFloat top = root.safeAreaInsets.top > 0 ? root.safeAreaInsets.top : 8, left = root.safeAreaInsets.left > 0 ? root.safeAreaInsets.left : 8;
-  b.frame = CGRectMake(left + 4, top + 4, 34, 34);
-  b.autoresizingMask = UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleBottomMargin;
-  [b addTarget:MPBtn.class action:@selector(tap) forControlEvents:UIControlEventTouchUpInside];
-  [root addSubview:b];
-  fprintf(stderr, "[mp] in-game friends button added\n");
+// ---------- in game: touch layout button "friends" runs gmod_ios_friends ----------
+static void cmd_hook(const char *c) {
+  if (strcmp(c, "gmod_ios_friends")) return;
+  static double last; double now = CFAbsoluteTimeGetCurrent(); if (now - last < 0.6) return; last = now;
+  dispatch_async(dispatch_get_main_queue(), ^{ UIViewController *v = top_vc(); if (v && ![v isKindOfClass:UINavigationController.class]) { extern void SDL_StopTextInput(void); SDL_StopTextInput(); mp_friends_present(v); } });
 }
 // called right before the engine starts
 void mp_game_start(int host_port) {
+  extern void (*bionic_cmd_hook)(const char *); bionic_cmd_hook = cmd_hook;
   g_ingame = 1; mp_boot();
   if (!gi_steam_user()) return;
   sm_set_playing(1);
   if (host_port > 0) sm_set_host(host_port);
   dispatch_async(dispatch_get_main_queue(), ^{ start_invite_timer(); });
-  if ([NSUserDefaults.standardUserDefaults objectForKey:@"mp_button"] == nil || [NSUserDefaults.standardUserDefaults boolForKey:@"mp_button"])
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 4 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ add_ingame_button(); });
 }

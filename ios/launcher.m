@@ -477,6 +477,7 @@ char **ios_run_launcher(const char *docs, const char *wr, int *argc) {
     while (!g_done) CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
     [vc writeCfg:[NSString stringWithUTF8String:wr]];
     { extern void cb_install(NSString *); cb_install([NSString stringWithUTF8String:wr]); }
+    { extern void te_friends_button(NSString *); te_friends_button([NSString stringWithUTF8String:wr]); }
     win.hidden = YES; win.rootViewController = nil;
   }
   win = nil;

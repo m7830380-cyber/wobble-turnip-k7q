@@ -27,7 +27,7 @@
   NSDictionary *m = @{@"attack": @"Fire", @"attack2": @"Secondary fire", @"spawnmenu": @"Spawn menu", @"contextmenu": @"Context menu",
     @"lastinv": @"Last weapon", @"duck": @"Crouch", @"edit": @"Layout editor", @"look": @"Look zone", @"more": @"⋯ menu",
     @"move": @"Move zone", @"score": @"Scoreboard", @"speed": @"Sprint", @"voice": @"Voice chat", @"thirdperson": @"Third person",
-    @"invnext": @"Next weapon", @"invprev": @"Previous weapon"};
+    @"invnext": @"Next weapon", @"invprev": @"Previous weapon", @"friends": @"Steam friends"};
   if (m[self.name]) return m[self.name];
   if ([self.name hasPrefix:@"custom_"]) return [@"Custom button " stringByAppendingString:[self.name substringFromIndex:7]];
   return self.name.length ? [[[self.name substringToIndex:1] uppercaseString] stringByAppendingString:[self.name substringFromIndex:1]] : @"?";
@@ -1022,3 +1022,29 @@ static jvalue j_openTouchControls(void *env, void *thiz, jvalue *a) {
 }
 static jni_impl_entry g_touch[] = {{0, "openTouchControls", 0, j_openTouchControls}};
 void touchedit_jni_init(void) { jni_add_impls(g_touch, 1); }
+
+// ---- Steam friends touch button (command gmod_ios_friends, caught from the engine's "Unknown command" line) ----
+#define FRIENDS_LINE @"touch_addbutton \"friends\" \"gmodvr_touch_icons/ios_friends\" \"gmod_ios_friends\" 0.640000 0.000000 0.700000 0.133333 255 255 255 155 8192 1"
+void te_friends_button(NSString *user) {
+  NSFileManager *fm = NSFileManager.defaultManager;
+  NSString *vp = [user stringByAppendingPathComponent:@"materials/gmodvr_touch_icons/ios_friends.vtf"];
+  if (![fm fileExistsAtPath:vp]) {
+    UIImageSymbolConfiguration *c = [UIImageSymbolConfiguration configurationWithPointSize:150 weight:UIImageSymbolWeightBold];
+    UIImage *sym = [[UIImage systemImageNamed:@"person.2.fill" withConfiguration:c] imageWithTintColor:[UIColor colorWithRed:170 / 255.0 green:1 blue:0 alpha:0.75] renderingMode:UIImageRenderingModeAlwaysOriginal];
+    UIGraphicsImageRendererFormat *f = [UIGraphicsImageRendererFormat preferredFormat]; f.scale = 1; f.opaque = NO;
+    UIImage *im = [[[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(256, 256) format:f] imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+      CGSize z = sym.size; float k = MIN(200 / z.width, 200 / z.height); [sym drawInRect:CGRectMake(128 - z.width * k / 2, 128 - z.height * k / 2, z.width * k, z.height * k)]; }];
+    atomic_write(vp, vtf_rgba8888(rgba_from_image(im, YES)));
+    atomic_write([vp.stringByDeletingPathExtension stringByAppendingPathExtension:@"vmt"], [touch_vmt(@"gmodvr_touch_icons/ios_friends") dataUsingEncoding:NSUTF8StringEncoding]);
+  }
+  // existing saved layout without the button -> add it once (into the ⋯ menu). Removing it in the editor keeps it removed.
+  NSString *prof = tl_profile_file([NSString stringWithContentsOfFile:[user stringByAppendingPathComponent:@"cfg/config.cfg"] encoding:NSUTF8StringEncoding error:nil] ?: @"");
+  NSString *file = [user stringByAppendingPathComponent:[@"cfg/" stringByAppendingString:prof]];
+  NSString *t = [NSString stringWithContentsOfFile:file encoding:NSUTF8StringEncoding error:nil];
+  if (!t || ![t containsString:@"touch_addbutton"] || [t containsString:@"\"friends\""]) return;
+  NSString *mark = [user stringByAppendingPathComponent:@"cfg/.ios_friends_added"];
+  if ([fm fileExistsAtPath:mark]) return;
+  atomic_write(file, [[NSString stringWithFormat:@"%@%@%@\n", t, [t hasSuffix:@"\n"] ? @"" : @"\n", FRIENDS_LINE] dataUsingEncoding:NSUTF8StringEncoding]);
+  atomic_write(mark, [NSData data]);
+  fprintf(stderr, "[touch] friends button added to %s\n", prof.UTF8String);
+}
