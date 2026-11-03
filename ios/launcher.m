@@ -336,7 +336,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
 - (void)mpTap:(UIButton *)b {
   NSString *act = b.accessibilityIdentifier;
   if ([act isEqual:@"host"]) {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Host a game" message:@"8 slots on the selected map.\nLAN = same Wi-Fi only.\nInternet = Steam friends can join via invite. The game tries to open UDP 27015 on your router, but it does NOT work on every ISP (CGNAT / mobile data = nobody can join). Use \"Can I host over the internet?\" to check" preferredStyle:1];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Host a game" message:@"8 slots on the selected map.\nLAN = same Wi-Fi, or Tailscale (bad ISP fix: everyone on the same tailnet joins your 100.x IP, see Join LAN > Tailscale friends).\nInternet = Steam friends can join via invite. The game tries to open UDP 27015 on your router, but it does NOT work on every ISP (CGNAT / mobile data = nobody can join). Use \"Can I host over the internet?\" to check" preferredStyle:1];
     [a addAction:[UIAlertAction actionWithTitle:@"Host LAN" style:0 handler:^(UIAlertAction *x) { [D setBool:NO forKey:@"host_inet"]; [self launch:@"host" target:[D stringForKey:@"gmod_map"] ?: @"gm_construct"]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Host internet (Steam friends)" style:0 handler:^(UIAlertAction *x) { [D setBool:YES forKey:@"host_inet"]; [self launch:@"host" target:[D stringForKey:@"gmod_map"] ?: @"gm_construct"]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; [self presentViewController:a animated:YES completion:nil]; return;

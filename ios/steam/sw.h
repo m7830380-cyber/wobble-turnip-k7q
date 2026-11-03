@@ -64,6 +64,7 @@ int sm_state(char *msg, size_t mn);                      // 0 off, 1 connecting,
 uint64_t sm_steamid(void);
 void sm_set_playing(int on);
 void sm_set_host(int port);
+void sm_set_host_ip(uint32_t ip); // 0 = public ip (Tailscale host uses its 100.x ip)
 void sm_set_server(const char *addr, int port);
 int sm_server(char *o, size_t on);
 void sm_auth_request(const char *addr, int port, uint64_t server_sid, int secure);

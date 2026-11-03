@@ -206,7 +206,11 @@ static int nc_cm(void *self, float ft, void *cmd) {
     if (mag > 1.f) {
       static float acc; const float q = (float)M_PI / 4.f;
       float th = atan2f(*sm, *fm) / q, k = floorf(th), t = th - k;
-      acc += t; float d = k; if (acc >= 1.f) { acc -= 1.f; d = k + 1.f; }
+      /* within ~15 degrees of one of the 8 directions just go that way: dithering a small offset meant mostly straight
+         with a 45-degree pop every few ticks = the left/right twitch when flying fast */
+      float d;
+      if (t < 0.33f) { d = k; acc = 0; } else if (t > 0.67f) { d = k + 1.f; acc = 0; }
+      else { acc += t; d = k; if (acc >= 1.f) { acc -= 1.f; d = k + 1.f; } }
       float c = cosf(d * q), sn = sinf(d * q);
       *fm = fabsf(c) < 0.01f ? 0.f : c * mag; *sm = fabsf(sn) < 0.01f ? 0.f : sn * mag;
     }
@@ -238,6 +242,23 @@ static void nc_patch(const char *lib, uintptr_t fo, uintptr_t av, uintptr_t gl, 
   else { uintptr_t pg = (uintptr_t)ins & ~(uintptr_t)16383; a = mprotect((void *)pg, 32768, PROT_READ | PROT_WRITE); memcpy(ins, t, 16); b = mprotect((void *)pg, 32768, PROT_READ | PROT_EXEC); }
   sys_icache_invalidate(ins, 16); fprintf(stderr, "[noclip] %s: retail GMod noclip movement (%d %d)\n", lib, a, b);
 }
+/* libengine 0.1.31 netadr_t::IsReservedAdr (0x5d179c): what a sv_lan 1 server lets in. Add Tailscale/CGNAT 100.64.0.0/10
+   so friends on the same tailnet count as LAN. netadr_t: int type (1 loopback, 3 ip) | uint8 ip[4] | port */
+static int ts_reserved(const uint8_t *a) {
+  int t = *(const int *)a; if (t == 1) return 1; if (t != 3) return 0; const uint8_t *ip = a + 4;
+  return ip[0] == 10 || ip[0] == 127 || (ip[0] == 172 && (ip[1] & 0xf0) == 16) || (ip[0] == 192 && ip[1] == 168) ||
+         (ip[0] == 100 && (ip[1] & 0xc0) == 64);
+}
+static void ts_patch(void) {
+  so_module *e = so_find("libengine.so"); if (!e) return;
+  uint32_t *ins = (uint32_t *)(e->base + 0x5d179c);
+  if (ins[0] != 0xb9400008 || ins[1] != 0x7100051f) { fprintf(stderr, "[tailscale] lan check: unexpected %08x\n", ins[0]); return; }
+  uint32_t t[4] = {0x58000050, 0xd61f0200, (uint32_t)(uintptr_t)ts_reserved, (uint32_t)((uintptr_t)ts_reserved >> 32)};
+  extern void *so_wptr(void *); extern int so_is_mirrored(void *); int a = 0, b = 0;
+  if (so_is_mirrored(ins)) memcpy(so_wptr(ins), t, 16);
+  else { uintptr_t pg = (uintptr_t)ins & ~(uintptr_t)16383; a = mprotect((void *)pg, 32768, PROT_READ | PROT_WRITE); memcpy(ins, t, 16); b = mprotect((void *)pg, 32768, PROT_READ | PROT_EXEC); }
+  sys_icache_invalidate(ins, 16); fprintf(stderr, "[tailscale] LAN servers accept 100.64.0.0/10 (%d %d)\n", a, b);
+}
 static int not_debugging(void) { return 0; }
 /* LuaJIT machine code crashes on iOS (debugger freezes the faulting thread) -> interpreter only */
 static void *lua_real(const char *n) { so_module *m = so_find("liblua_shared.so"); return m ? so_sym(m, n) : NULL; }
@@ -251,6 +272,7 @@ static void lua_patch_once(void) {
   nc_patch("libclient.so", 0x6084d4, 0xbde834, 0xfbe678, 0, (void *)nc_cl);
   nc_patch("libserver.so", 0x6a2828, 0xd2813c, 0x1007450, 1, (void *)nc_sv);
   nc_cm_patch();
+  ts_patch();
   so_module *cl = so_find("libclient.so");
   if (cl) { uint32_t *ins = (uint32_t *)(cl->base + 0x9b6d90); uintptr_t p2 = (uintptr_t)ins & ~(uintptr_t)16383;
     extern void *so_wptr(void *); extern int so_is_mirrored(void *);

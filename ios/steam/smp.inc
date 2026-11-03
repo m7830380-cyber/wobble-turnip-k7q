@@ -19,7 +19,7 @@ typedef struct { uint64_t job; int used, done, eres; uint8_t *body; size_t bn; }
 static struct {
   pthread_mutex_t mu, smu; pthread_cond_t cv; pthread_t th; int th_on, stop, reconnect;
   char acct[128], tok[4096]; int anon, have_id; uint32_t loginid;
-  sw_ws *ws; uint64_t sid; int32_t sess; uint64_t job; int hb; uint32_t pubip; time_t up_at, last_hb;
+  sw_ws *ws; uint64_t sid; int32_t sess; uint64_t job; int hb; uint32_t pubip, hostip; time_t up_at, last_hb;
   int state; char err[300]; int logon_eres, got_logon;
   int blocked, play_known, playing, adv_dirty; uint32_t srv_ip; uint16_t srv_port; uint64_t srv_sid; char srv[80];
   uint8_t *tq[32]; size_t tqn[32]; int ntok, keep;
@@ -258,7 +258,7 @@ static void sm_on(uint32_t e, uint64_t jt, int er, const char *jn, const uint8_t
 static void sm_send_played(void) {
   pthread_mutex_lock(&SM.mu);
   int play = SM.playing && !SM.blocked; uint32_t ip = SM.srv_ip; uint16_t port = SM.srv_port; uint64_t gs = SM.srv_sid; SM.adv_dirty = 0;
-  if (!strncmp(SM.srv, "host:", 5) && SM.pubip) ip = SM.pubip; // hosting: show our server so friends can join
+  if (!strncmp(SM.srv, "host:", 5) && (SM.hostip || SM.pubip)) ip = SM.hostip ? SM.hostip : SM.pubip; // hosting: show our server so friends can join
   pthread_mutex_unlock(&SM.mu);
   buf b = {0};
   if (play) { buf g = {0}; if (gs) fvar(&g, 1, gs); ff64(&g, 2, SM_APP);
@@ -450,6 +450,7 @@ static int sm_wait_up(int secs, char *err, size_t errn) {
   return st == 2 ? 0 : -1;
 }
 void sm_set_playing(int on) { pthread_mutex_lock(&SM.mu); SM.playing = on; SM.adv_dirty = 1; pthread_mutex_unlock(&SM.mu); }
+void sm_set_host_ip(uint32_t ip) { pthread_mutex_lock(&SM.mu); SM.hostip = ip; SM.adv_dirty = 1; pthread_mutex_unlock(&SM.mu); }
 void sm_set_host(int port) { // hosting a listen server: invites point to our public ip
   pthread_mutex_lock(&SM.mu);
   if (port > 0) { SM.srv_port = (uint16_t)port; SM.srv_ip = 0; SM.srv_sid = 0; snprintf(SM.srv, sizeof SM.srv, "host:%d", port); }
@@ -465,7 +466,7 @@ void sm_set_server(const char *addr, int port) { // joined a remote server (seen
 }
 int sm_server(char *o, size_t on) { // current "+connect" target for invites
   pthread_mutex_lock(&SM.mu); int ok = 0;
-  if (!strncmp(SM.srv, "host:", 5)) { if (SM.pubip) { char a[40]; sm_ipstr(SM.pubip, SM.srv_port, a, sizeof a); snprintf(o, on, "%s", a); ok = 1; } }
+  if (!strncmp(SM.srv, "host:", 5)) { uint32_t hip = SM.hostip ? SM.hostip : SM.pubip; if (hip) { char a[40]; sm_ipstr(hip, SM.srv_port, a, sizeof a); snprintf(o, on, "%s", a); ok = 1; } }
   else if (SM.srv[0]) { snprintf(o, on, "%s", SM.srv); ok = 1; }
   pthread_mutex_unlock(&SM.mu); return ok;
 }

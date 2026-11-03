@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 // Steam friends / invites UI: friends list (join friends in GMod, invite them to your server),
 // incoming invite popups (launcher + in game), small in-game friends button, avatar decoding for the engine.
 #import <UIKit/UIKit.h>
@@ -7,6 +8,7 @@
 extern NSString *gi_steam_user(void);
 extern NSString *gi_steam_token(void);
 NSString *lan_my_ip(void);
+NSString *lan_ts_ip(void);
 
 // ---------- avatars: JPEG -> RGBA size x size ----------
 static unsigned char *decode_img(const uint8_t *d, size_t n, int size) {
@@ -184,7 +186,10 @@ static void line_hook(const char *l) {
   const char *k;
   if ((k = strstr(l, "Network: IP ")) && strstr(k, "mode ")) {
     int sv = 0; const char *pp = strstr(k, "ports "); if (pp) sv = atoi(pp + 6);
-    if (strstr(k, "mode MP") && sv > 0) { sm_set_host(sv); sw_log("[mp] engine: multiplayer game, hosting on port %d", sv); up_open_port(sv); }
+    if (strstr(k, "mode MP") && sv > 0) { sm_set_host(sv); sw_log("[mp] engine: multiplayer game, hosting on port %d", sv);
+      NSString *ts = [NSUserDefaults.standardUserDefaults boolForKey:@"host_inet"] ? nil : lan_ts_ip(); struct in_addr ia;
+      if (ts && inet_pton(AF_INET, ts.UTF8String, &ia) == 1) { sm_set_host_ip(ntohl(ia.s_addr)); sw_log("[mp] hosting over Tailscale: invites point to %s:%d", ts.UTF8String, sv); }
+      else { sm_set_host_ip(0); up_open_port(sv); } }
     else if (strstr(k, "mode SP")) { sm_set_host(0); sw_log("[mp] engine: singleplayer"); }
     return;
   }

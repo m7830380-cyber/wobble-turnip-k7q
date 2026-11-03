@@ -23,6 +23,20 @@ NSString *lan_my_ip(void) {
   freeifaddrs(ifa); return r;
 }
 
+// Tailscale (and ZeroTier/other VPN apps) show up as a utun interface with a 100.64.0.0/10 address
+NSString *lan_ts_ip(void) {
+  struct ifaddrs *ifa = NULL, *i; NSString *r = nil;
+  if (getifaddrs(&ifa)) return nil;
+  for (i = ifa; i; i = i->ifa_next) {
+    if (!i->ifa_addr || i->ifa_addr->sa_family != AF_INET || !(i->ifa_flags & IFF_UP)) continue;
+    uint32_t a = ntohl(((struct sockaddr_in *)i->ifa_addr)->sin_addr.s_addr);
+    if ((a >> 22) == (0x64400000u >> 22) && !strncmp(i->ifa_name, "utun", 4)) {
+      char b[INET_ADDRSTRLEN]; inet_ntop(AF_INET, &((struct sockaddr_in *)i->ifa_addr)->sin_addr, b, sizeof b); r = @(b); break; }
+  }
+  freeifaddrs(ifa); return r;
+}
+static NSArray<NSString *> *ts_peers(void) { return [NSUserDefaults.standardUserDefaults stringArrayForKey:@"ts_peers"] ?: @[]; }
+
 static NSString *rstr(const uint8_t *p, int n, int *o) {
   int s = *o; while (*o < n && p[*o]) (*o)++;
   NSString *r = [[NSString alloc] initWithBytes:p + s length:*o - s encoding:NSUTF8StringEncoding] ?: @"?";
@@ -81,10 +95,16 @@ void lan_scan(void (^done)(NSArray<NSDictionary *> *servers, NSString *err)) {
           for (int p = 27015; p <= 27020; p++) sendq((mine & 0xFFFFFF00) | h, p, Q, sizeof Q);
           if (h % 32 == 0) { drain(0); usleep(3000); }
         }
+      for (NSString *pe in ts_peers()) {  // Tailscale friends: no broadcast over the tunnel, ask each saved 100.x ip
+        NSArray *hp = [pe componentsSeparatedByString:@":"]; struct in_addr ia;
+        if (inet_pton(AF_INET, [hp.firstObject UTF8String], &ia) != 1) continue;
+        if (hp.count > 1) sendq(ntohl(ia.s_addr), [hp[1] intValue], Q, sizeof Q);
+        else for (int p = 27015; p <= 27020; p++) sendq(ntohl(ia.s_addr), p, Q, sizeof Q);
+      }
       drain(pass ? 1500 : 600);
     }
     close(s);
-    NSString *err = me ? nil : @"Not connected to Wi-Fi.";
+    NSString *err = (me || lan_ts_ip()) ? nil : @"Not connected to Wi-Fi (or Tailscale).";
     dispatch_async(dispatch_get_main_queue(), ^{ done(out, err); });
   });
 }
@@ -111,16 +131,24 @@ void lan_scan(void (^done)(NSArray<NSDictionary *> *servers, NSString *err)) {
   self.navigationItem.rightBarButtonItem.enabled = NO;
   lan_scan(^(NSArray *sv, NSString *err) {
     self.servers = sv; self.navigationItem.rightBarButtonItem.enabled = YES; [self.refreshControl endRefreshing];
-    NSString *me = lan_my_ip();
+    NSString *me = lan_my_ip(), *ts = lan_ts_ip();
+    if (ts) me = [NSString stringWithFormat:@"%@ · Tailscale %@", me ?: @"no Wi-Fi", ts];
     self.status = err ?: (sv.count ? [NSString stringWithFormat:@"Your IP: %@", me] :
       [NSString stringWithFormat:@"No games found. Your IP: %@\nIf you dont see the game you either didnt type sv_lan or didnt allow ios to have local network access, allow it. or youre a dumbo", me]);
     [self.tableView reloadData];
   });
 }
-- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return self.servers.count + 1; }
+- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return self.servers.count + 2; }
 - (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
   UITableViewCell *c = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
   c.textLabel.numberOfLines = 0; c.detailTextLabel.numberOfLines = 0;
+  if (ip.row == (NSInteger)self.servers.count + 1) {
+    NSArray *pe = ts_peers(); NSString *ts = lan_ts_ip();
+    c.textLabel.text = @"Tailscale friends…"; c.textLabel.textColor = c.tintColor;
+    c.detailTextLabel.text = [NSString stringWithFormat:@"%@\n%@", ts ? [NSString stringWithFormat:@"You're on Tailscale: %@ (give this to your friends)", ts] : @"Tailscale is off. Turn it on in the Tailscale app (needed when your ISP won't let LAN/internet hosting work)",
+      pe.count ? [NSString stringWithFormat:@"Scanning: %@", [pe componentsJoinedByString:@", "]] : @"Add your friends' 100.x.x.x Tailscale IPs so their games show up here"];
+    c.detailTextLabel.textColor = UIColor.secondaryLabelColor; return c;
+  }
   if (ip.row == (NSInteger)self.servers.count) {
     c.textLabel.text = @"Enter IP manually…"; c.textLabel.textColor = c.tintColor;
     c.detailTextLabel.text = self.status; c.detailTextLabel.textColor = UIColor.secondaryLabelColor;
@@ -135,6 +163,7 @@ void lan_scan(void (^done)(NSArray<NSDictionary *> *servers, NSString *err)) {
 }
 - (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)ip {
   [t deselectRowAtIndexPath:ip animated:YES];
+  if (ip.row == (NSInteger)self.servers.count + 1) { [self tsPeers]; return; }
   if (ip.row == (NSInteger)self.servers.count) {
     UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Join by IP" message:nil preferredStyle:1];
     [a addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"192.168.1.10:27015"; f.text = [NSUserDefaults.standardUserDefaults stringForKey:@"last_ip"]; f.keyboardType = UIKeyboardTypeNumbersAndPunctuation; }];
@@ -145,6 +174,22 @@ void lan_scan(void (^done)(NSArray<NSDictionary *> *servers, NSString *err)) {
     [self presentViewController:a animated:YES completion:nil]; return;
   }
   [self go:self.servers[ip.row][@"addr"]];
+}
+- (void)tsPeers {
+  NSUserDefaults *D = NSUserDefaults.standardUserDefaults; NSString *ts = lan_ts_ip();
+  UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Tailscale friends"
+    message:[NSString stringWithFormat:@"Bad ISP (CGNAT) and no LAN? Everyone installs Tailscale (free), logs into the SAME tailnet (or the host shares their device with you), turns it on. The host hits Host LAN, everyone else joins the host's 100.x.x.x IP.\n\n%@\n\nFriends' Tailscale IPs, comma separated (ip or ip:port):", ts ? [NSString stringWithFormat:@"Your Tailscale IP: %@", ts] : @"Tailscale is OFF on this phone rn"]
+    preferredStyle:1];
+  [a addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"100.101.102.103, 100.88.1.2"; f.text = [ts_peers() componentsJoinedByString:@", "]; f.keyboardType = UIKeyboardTypeNumbersAndPunctuation; }];
+  [a addAction:[UIAlertAction actionWithTitle:@"Save + scan" style:0 handler:^(UIAlertAction *x) {
+    NSMutableArray *o = [NSMutableArray new];
+    for (NSString *p in [a.textFields.firstObject.text componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@", \n"]]) if (p.length) [o addObject:p];
+    [D setObject:o forKey:@"ts_peers"]; [self scan]; }]];
+  if (ts) [a addAction:[UIAlertAction actionWithTitle:@"Copy my Tailscale IP" style:0 handler:^(UIAlertAction *x) { UIPasteboard.generalPasteboard.string = [ts stringByAppendingString:@":27015"]; }]];
+  [a addAction:[UIAlertAction actionWithTitle:@"Get Tailscale (App Store)" style:0 handler:^(UIAlertAction *x) {
+    [UIApplication.sharedApplication openURL:[NSURL URLWithString:@"https://apps.apple.com/app/tailscale/id1470499037"] options:@{} completionHandler:nil]; }]];
+  [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]];
+  [self presentViewController:a animated:YES completion:nil];
 }
 - (void)go:(NSString *)addr {
   [NSUserDefaults.standardUserDefaults setObject:addr forKey:@"last_ip"];
