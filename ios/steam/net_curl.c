@@ -74,6 +74,8 @@ static void st(void *u, const char *t, uint64_t d, uint64_t tot) { (void)u; stat
 int main(int argc, char **argv) {
   curl_global_init(CURL_GLOBAL_ALL); char err[512]; uint64_t *ids; int n; sw_progress p = {st, 0, 0};
   if (sw_resolve(argv[2], &ids, &n, &p, err, sizeof err)) return 1;
+  if (argc > 3 && !strcmp(argv[3], "deps")) { uint64_t *d; char (*t)[128]; int nd; if (sw_deps(argv[1], ids, n, &d, &t, &nd, &p, err, sizeof err)) { fprintf(stderr, "FAIL %s\n", err); return 1; }
+    for (int i = 0; i < nd; i++) printf("dep %llu %s\n", (unsigned long long)d[i], t[i]); return 0; }
   for (int i = 0; i < n; i++) { fprintf(stderr, "item %llu\n", (unsigned long long)ids[i]); if (sw_install(argv[1], ids[i], 0, &p, err, sizeof err)) fprintf(stderr, "FAIL %s\n", err); }
   return 0;
 }

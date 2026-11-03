@@ -259,6 +259,48 @@ static void ts_patch(void) {
   else { uintptr_t pg = (uintptr_t)ins & ~(uintptr_t)16383; a = mprotect((void *)pg, 32768, PROT_READ | PROT_WRITE); memcpy(ins, t, 16); b = mprotect((void *)pg, 32768, PROT_READ | PROT_EXEC); }
   sys_icache_invalidate(ins, 16); fprintf(stderr, "[tailscale] LAN servers accept 100.64.0.0/10 (%d %d)\n", a, b);
 }
+/* libtogl 0.1.31 (path 2 = this GPU has no native S3TC): every DXT1 texture is transcoded to ETC2 RGB8 (0x9274), which has
+   NO alpha. D3D9 DXT1 has 1-bit alpha ($alphatest sprites, cutouts, decals) -> the transparent texels became BLACK.
+   The DXT1 branches of the upload function (vaddr 0xa2cb4 linear / 0xa2cc4 sRGB, 4 insns each) now jump to dxt1_stub:
+   if the mip really uses transparent texels, upload it through the RGBA8 CPU decode (0xa2d70) as 0x83f1 / 0x8c4d
+   (DXT1 with alpha); else keep ETC2. Regs there: x27 data, w25 width, w20 height, x8 bytes, w26 GL format. */
+uintptr_t g_dxt1_etc2, g_dxt1_dec; int g_dxt1_n;
+int dxt1_has_alpha(const uint8_t *d, int w, int h, int64_t n) {
+  if (!d || w < 1 || h < 1) return 0;
+  int64_t bl = (int64_t)((w + 3) / 4) * ((h + 3) / 4) * 8; if (n > 0 && n < bl) bl = n;
+  for (int64_t o = 0; o + 8 <= bl; o += 8) {
+    uint16_t c0 = d[o] | d[o + 1] << 8, c1 = d[o + 2] | d[o + 3] << 8; if (c0 > c1) continue;
+    uint32_t ix = d[o + 4] | d[o + 5] << 8 | d[o + 6] << 16 | (uint32_t)d[o + 7] << 24;
+    for (int k = 0; k < 16; k++) if (((ix >> (2 * k)) & 3) == 3) { if (g_dxt1_n++ < 8) fprintf(stderr, "[dxt1] %dx%d has 1-bit alpha -> RGBA8 decode\n", w, h); return 1; }
+  }
+  return 0;
+}
+#define DXT1_STUB(name, srgb, fmt) \
+__asm__(".text\n.p2align 2\n.globl _" #name "\n_" #name ":\n" \
+  "stp x29, x30, [sp, #-160]!\n stp x0, x1, [sp, #16]\n stp x2, x3, [sp, #32]\n stp x4, x5, [sp, #48]\n stp x6, x7, [sp, #64]\n" \
+  "stp x8, x9, [sp, #80]\n stp x10, x11, [sp, #96]\n stp x12, x13, [sp, #112]\n stp x14, x15, [sp, #128]\n" \
+  "mov x0, x27\n mov w1, w25\n mov w2, w20\n mov x3, x8\n bl _dxt1_has_alpha\n mov w17, w0\n" \
+  "ldp x0, x1, [sp, #16]\n ldp x2, x3, [sp, #32]\n ldp x4, x5, [sp, #48]\n ldp x6, x7, [sp, #64]\n" \
+  "ldp x8, x9, [sp, #80]\n ldp x10, x11, [sp, #96]\n ldp x12, x13, [sp, #112]\n ldp x14, x15, [sp, #128]\n ldp x29, x30, [sp], #160\n" \
+  "cbz w17, 1f\n mov w26, #" #fmt "\n adrp x16, _g_dxt1_dec@PAGE\n ldr x16, [x16, _g_dxt1_dec@PAGEOFF]\n br x16\n" \
+  "1:\n mov w9, #" #srgb "\n mov w16, #0\n mov w15, #1\n adrp x17, _g_dxt1_etc2@PAGE\n ldr x17, [x17, _g_dxt1_etc2@PAGEOFF]\n br x17\n");
+DXT1_STUB(dxt1_stub_lin, 0, 0x83f1)
+DXT1_STUB(dxt1_stub_srgb, 1, 0x8c4d)
+extern char dxt1_stub_lin[], dxt1_stub_srgb[];
+static void dxt1_patch(void) {
+  so_module *tg = so_find("libtogl.so"); if (!tg) return;
+  uint32_t *a = (uint32_t *)(tg->base + 0xa2cb4), *b = (uint32_t *)(tg->base + 0xa2cc4);
+  if (a[0] != 0x2a1f03e9 || a[3] != 0x1400000b || b[0] != 0x2a1f03f0 || b[3] != 0x14000007) { fprintf(stderr, "[dxt1] unexpected %08x %08x\n", a[0], b[0]); return; }
+  g_dxt1_etc2 = tg->base + 0xa2cec; g_dxt1_dec = tg->base + 0xa2d70;
+  extern void *so_wptr(void *); extern int so_is_mirrored(void *);
+  uint32_t ta[4] = {0x58000050, 0xd61f0200, (uint32_t)(uintptr_t)dxt1_stub_lin, (uint32_t)((uintptr_t)dxt1_stub_lin >> 32)};
+  uint32_t tb[4] = {0x58000050, 0xd61f0200, (uint32_t)(uintptr_t)dxt1_stub_srgb, (uint32_t)((uintptr_t)dxt1_stub_srgb >> 32)};
+  int r1 = 0, r2 = 0;
+  if (so_is_mirrored(a)) { memcpy(so_wptr(a), ta, 16); memcpy(so_wptr(b), tb, 16); }
+  else { uintptr_t pg = (uintptr_t)a & ~(uintptr_t)16383; r1 = mprotect((void *)pg, 32768, PROT_READ | PROT_WRITE);
+    memcpy(a, ta, 16); memcpy(b, tb, 16); r2 = mprotect((void *)pg, 32768, PROT_READ | PROT_EXEC); }
+  sys_icache_invalidate(a, 32); fprintf(stderr, "[dxt1] DXT1 with 1-bit alpha -> RGBA8 instead of ETC2 RGB (%d %d)\n", r1, r2);
+}
 static int not_debugging(void) { return 0; }
 /* LuaJIT machine code crashes on iOS (debugger freezes the faulting thread) -> interpreter only */
 static void *lua_real(const char *n) { so_module *m = so_find("liblua_shared.so"); return m ? so_sym(m, n) : NULL; }
@@ -550,6 +592,7 @@ int main(int argc, char **argv) {
     }
   }
   so_init_all();
+  dxt1_patch();
   { /* libshaderapidx9 0.1.31: the dynamic index buffer is 32768 indices; big addon meshes ask for more
        ("too many indices for index buffer (32802>32768)") -> tier0 Error() -> the game exits. Make it 65536. */
     so_module *sa = so_find("libshaderapidx9.so");

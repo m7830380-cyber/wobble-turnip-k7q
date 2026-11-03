@@ -130,6 +130,25 @@ static void ui_status(void *ud, const char *t, uint64_t d, uint64_t tot) {
     sw_progress p = {ui_status, (__bridge void *)self, &g_cancel}; char err[512] = ""; uint64_t *ids = NULL; int n = 0, ok = 0, bad = 0;
     NSMutableString *fails = [NSMutableString new];
     if (sw_resolve(cs, &ids, &n, &p, err, sizeof err)) [fails appendFormat:@"%s", err];
+    if (n > 0 && !g_cancel) {  // "Required items" on the Workshop page: offer to grab the ones not installed yet
+      uint64_t *dp = NULL; char (*dt)[128] = NULL; int nd = 0; char e3[512] = "";
+      if (sw_deps(root.fileSystemRepresentation, ids, n, &dp, &dt, &nd, &p, e3, sizeof e3)) sw_log("[workshop] dependency check failed: %s", e3);
+      if (nd > 0) {
+        NSMutableString *lst = [NSMutableString new];
+        for (int i = 0; i < nd; i++) [lst appendFormat:@"%@• %s", i ? @"\n" : @"", dt[i]];
+        dispatch_semaphore_t sem = dispatch_semaphore_create(0); __block int yes = 1;
+        dispatch_async(dispatch_get_main_queue(), ^{
+          UIAlertController *a = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"This addon needs %d other addon%s", nd, nd == 1 ? "" : "s"]
+            message:[NSString stringWithFormat:@"Required items you don't have yet:\n\n%@\n\nGrab them too?", lst] preferredStyle:1];
+          [a addAction:[UIAlertAction actionWithTitle:@"Yeah, download all" style:0 handler:^(UIAlertAction *x) { yes = 1; dispatch_semaphore_signal(sem); }]];
+          [a addAction:[UIAlertAction actionWithTitle:@"Nah, just this one" style:1 handler:^(UIAlertAction *x) { yes = 0; dispatch_semaphore_signal(sem); }]];
+          [self.presentedViewController ?: self presentViewController:a animated:YES completion:nil]; });
+        dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+        if (yes) { ids = realloc(ids, 8 * (n + nd)); memcpy(ids + n, dp, 8 * nd); n += nd; }
+        sw_log("[workshop] %d required addon(s) %s", nd, yes ? "added" : "skipped");
+      }
+      free(dp); free(dt);
+    }
     for (int i = 0; i < n && !g_cancel; i++) {
       char e2[512] = ""; ui_status((__bridge void *)self, [NSString stringWithFormat:@"Item %d/%d…", i + 1, n].UTF8String, 0, 0);
       if (sw_install(root.fileSystemRepresentation, ids[i], 0, &p, e2, sizeof e2)) { bad++; [fails appendFormat:@"%s%llu: %s", fails.length ? "\n" : "", (unsigned long long)ids[i], e2]; }

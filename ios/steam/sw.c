@@ -220,6 +220,29 @@ int sw_resolve(const char *spec, uint64_t **ids, int *n, sw_progress *p, char *e
   return 0;
 }
 
+// required items ("Required items" on the Workshop page = children of a normal item) not in ids[] and not installed
+int sw_deps(const char *root, const uint64_t *ids, int n, uint64_t **deps, char (**titles)[128], int *nd, sw_progress *p, char *err, size_t errn) {
+  *deps = NULL; *titles = NULL; *nd = 0; if (n <= 0) return 0;
+  uint64_t *q = malloc(8 * n); int nq = n; memcpy(q, ids, 8 * n);
+  for (int depth = 0; depth < 4 && nq; depth++) {
+    if (p && p->status) p->status(p->ud, "Checking required addons…", 0, 0);
+    sw_details *det = calloc(nq, sizeof *det); uint64_t *next = NULL; int nn = 0;
+    for (int i = 0; i < nq; i += 100) { int c = nq - i < 100 ? nq - i : 100;
+      if (get_details(q + i, c, det + i, err, errn, p ? p->cancel : NULL)) { for (int k = 0; k < i; k++) free(det[k].children); free(det); free(q); return -1; } }
+    for (int i = 0; i < nq; i++) {
+      if (depth) { int known = 0; for (int k = 0; k < n; k++) known |= ids[k] == q[i]; for (int k = 0; k < *nd; k++) known |= (*deps)[k] == q[i];
+        if (!known && det[i].result == 1 && det[i].file_type != 2 && !sw_installed(root, q[i], 0, 0, 0)) {
+          *deps = realloc(*deps, 8 * (*nd + 1)); *titles = realloc(*titles, 128 * (*nd + 1));
+          (*deps)[*nd] = q[i]; snprintf((*titles)[*nd], 128, "%s", det[i].title[0] ? det[i].title : "?"); (*nd)++; }
+        else if (known) { free(det[i].children); continue; } }
+      if (det[i].file_type != 2) for (int c = 0; c < det[i].nchildren; c++) { next = realloc(next, 8 * (nn + 1)); next[nn++] = det[i].children[c]; }
+      free(det[i].children);
+    }
+    free(det); free(q); q = next; nq = nn;
+  }
+  free(q); return 0;
+}
+
 // ---------------- crypto / codecs ----------------
 static int symdec(const uint8_t key[32], const uint8_t *d, size_t n, uint8_t **out, size_t *on) {
   if (n < 32 || (n - 16) % 16) return -1;

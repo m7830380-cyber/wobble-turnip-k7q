@@ -35,6 +35,7 @@ int sw_resolve(const char *spec, uint64_t **ids, int *n, sw_progress *p, char *e
 // Download + install one item. root = content root containing garrysmod/; join=1 -> cache/workshop_join
 int sw_install(const char *root, uint64_t id, int join, sw_progress *p, char *err, size_t errn);
 // Already installed with at least this time (and crc if nonzero)?
+int sw_deps(const char *root, const uint64_t *ids, int n, uint64_t **deps, char (**titles)[128], int *nd, sw_progress *p, char *err, size_t errn);
 int sw_installed(const char *root, uint64_t id, uint64_t time, uint64_t crc, int join);
 void sw_log(const char *fmt, ...);
 
