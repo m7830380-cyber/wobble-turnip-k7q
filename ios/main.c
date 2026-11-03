@@ -401,7 +401,19 @@ int main(int argc, char **argv) {
   setenv("APP_DATA_PATH", g_docs, 1);
   setenv("VALVE_GAME_PATH", g_docs, 1);
   setenv("SOURCEVR_SHARED_CONTENT_PATH", g_docs, 1);
-  setenv("SOURCEVR_WRITE_GAME_PATH", wr, 1);
+  { /* engine builds "<write path>/cache/sound/v2/<64 hex>.sound.cache" into a 260-byte buffer and refuses the whole
+       sound cache when it doesn't fit (-> "Failed to load sound"). LiveContainer nests the container -> too long.
+       Use a short symlink in the outer (host) container instead. */
+    const char *ew = wr; static char sw[600];
+    if (strlen(wr) + 92 >= 260) {
+      const char *m = strstr(g_docs, "/Documents/Data/Application/");
+      if (m) { snprintf(sw, sizeof sw, "%.*s/gmw", (int)(m - g_docs), g_docs);
+        char cur[1200]; ssize_t n = readlink(sw, cur, sizeof cur - 1); if (n > 0) cur[n] = 0;
+        if (n <= 0 || strcmp(cur, wr)) { unlink(sw); symlink(wr, sw); }
+        struct stat st; if (!stat(sw, &st) && S_ISDIR(st.st_mode) && strlen(sw) + 92 < 260) ew = sw; }
+      fprintf(stderr, "[snd] write path %zu chars too long for sound cache -> %s\n", strlen(wr), ew == wr ? "NO short path found" : ew);
+    }
+    setenv("SOURCEVR_WRITE_GAME_PATH", ew, 1); }
   setenv("SOURCEVR_GAME", "garrysmod", 1); setenv("SOURCE_GAME", "garrysmod", 1); setenv("EXTRAS_VPK_PATH", rt, 1); setenv("APP_MOD_LIB", lib, 1); setenv("LANG", "en_US.UTF-8", 1);
   bionic_set_root(g_docs);
   setenv("SO_MAP", "1", 1); setenv("SO_VERBOSE", "1", 1);
