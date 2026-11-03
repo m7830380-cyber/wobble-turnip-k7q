@@ -291,7 +291,7 @@ static void dxt1_patch(void) {
   so_module *tg = so_find("libtogl.so"); if (!tg) return;
   uint32_t *a = (uint32_t *)(tg->base + 0xa2cb4), *b = (uint32_t *)(tg->base + 0xa2cc4);
   if (a[0] != 0x2a1f03e9 || a[3] != 0x1400000b || b[0] != 0x2a1f03f0 || b[3] != 0x14000007) { fprintf(stderr, "[dxt1] unexpected %08x %08x\n", a[0], b[0]); return; }
-  g_dxt1_etc2 = tg->base + 0xa2cec; g_dxt1_dec = tg->base + 0xa2d70;
+  g_dxt1_etc2 = (uintptr_t)tg->base + 0xa2cec; g_dxt1_dec = (uintptr_t)tg->base + 0xa2d70;
   extern void *so_wptr(void *); extern int so_is_mirrored(void *);
   uint32_t ta[4] = {0x58000050, 0xd61f0200, (uint32_t)(uintptr_t)dxt1_stub_lin, (uint32_t)((uintptr_t)dxt1_stub_lin >> 32)};
   uint32_t tb[4] = {0x58000050, 0xd61f0200, (uint32_t)(uintptr_t)dxt1_stub_srgb, (uint32_t)((uintptr_t)dxt1_stub_srgb >> 32)};
