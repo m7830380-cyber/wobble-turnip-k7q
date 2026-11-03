@@ -1,3 +1,4 @@
+#include <math.h>
 #include <dirent.h>
 #include <libkern/OSCacheControl.h>
 #include <sys/mman.h>
@@ -169,6 +170,38 @@ static int my_ShowSimpleMessageBox(unsigned flags, const char *title, const char
   (void)win; fprintf(stderr, "\n*** MESSAGEBOX [%u] %s: %s\n", flags, title ? title : "", msg ? msg : "");
   if (++g_msgboxes > 3) return 0;
   return SDL_ShowSimpleMessageBox(flags, title, msg, NULL);
+}
+/* Noclip: GDroid's CGameMovement::FullNoClipMove (libclient 0x6084d4 / libserver 0x6a2828, 0.1.31) is the HL2/SDK one
+   (wishspeed = maxspeed * sv_noclipspeed, with acceleration + upmove). Retail GMod (PC server_srv.so 0x592cb0) does:
+   wish = norm(norm(fwd*fm) + norm(right*sm) + (0,0,jump)); vel = wish * sv_noclipspeed * 100 (x3 IN_SPEED, x0.1 IN_DUCK);
+   origin += vel * frametime. On a PC server the phone's prediction flew faster than the server -> snapped back.
+   Replace both with the retail version. mv offsets (arm64): viewangles +0x14, buttons +44, fm +52, sm +56, vel +72, origin +200. */
+static void (*nc_anglevec[2])(const float *, float *, float *, float *);
+static void ***nc_globals[2];
+static void nc_move(int w, void *gm, float factor) {
+  char *mv = *(char **)((char *)gm + 32); float f[3], r[3], u[3];
+  nc_anglevec[w]((float *)(mv + 0x14), f, r, u);
+  int bt = *(int *)(mv + 44); float fm = *(float *)(mv + 52), sm = *(float *)(mv + 56), a[3], b[3], c[3] = {0, 0, (bt & 2) ? 1.f : 0.f}, wv[3];
+  for (int i = 0; i < 3; i++) { a[i] = f[i] * fm; b[i] = r[i] * sm; }
+  float la = 1.f / sqrtf(a[0]*a[0] + a[1]*a[1] + a[2]*a[2] + 1e-10f), lb = 1.f / sqrtf(b[0]*b[0] + b[1]*b[1] + b[2]*b[2] + 1e-10f), lc = 1.f / sqrtf(c[2]*c[2] + 1e-10f);
+  for (int i = 0; i < 3; i++) wv[i] = a[i]*la + b[i]*lb + c[i]*lc;
+  float lw = 1.f / sqrtf(wv[0]*wv[0] + wv[1]*wv[1] + wv[2]*wv[2] + 1e-10f), sp = factor * 100.f;
+  if (bt & 0x20000) sp *= 3.f; if (bt & 4) sp *= 0.1f;
+  float ft = *(float *)((char *)**nc_globals[w] + 16), *vel = (float *)(mv + 72), *org = (float *)(mv + 200);
+  for (int i = 0; i < 3; i++) { vel[i] = wv[i] * lw * sp; org[i] += vel[i] * ft; }
+}
+static void nc_cl(void *gm, float factor, float accel) { (void)accel; nc_move(0, gm, factor); }
+static void nc_sv(void *gm, float factor, float accel) { (void)accel; nc_move(1, gm, factor); }
+static void nc_patch(const char *lib, uintptr_t fo, uintptr_t av, uintptr_t gl, int w, void *fnp) {
+  so_module *mm = so_find(lib); if (!mm) { fprintf(stderr, "[noclip] %s not loaded\n", lib); return; }
+  uint32_t *ins = (uint32_t *)(mm->base + fo);
+  if (ins[0] != 0xd10243ff || ins[1] != 0x6d0433ed) { fprintf(stderr, "[noclip] %s: unexpected %08x %08x\n", lib, ins[0], ins[1]); return; }
+  nc_anglevec[w] = (void *)(mm->base + av); nc_globals[w] = (void ***)(mm->base + gl);
+  uint32_t t[4] = {0x58000050, 0xd61f0200, (uint32_t)(uintptr_t)fnp, (uint32_t)((uintptr_t)fnp >> 32)};
+  extern void *so_wptr(void *); extern int so_is_mirrored(void *); int a = 0, b = 0;
+  if (so_is_mirrored(ins)) memcpy(so_wptr(ins), t, 16);
+  else { uintptr_t pg = (uintptr_t)ins & ~(uintptr_t)16383; a = mprotect((void *)pg, 32768, PROT_READ | PROT_WRITE); memcpy(ins, t, 16); b = mprotect((void *)pg, 32768, PROT_READ | PROT_EXEC); }
+  sys_icache_invalidate(ins, 16); fprintf(stderr, "[noclip] %s: retail GMod noclip movement (%d %d)\n", lib, a, b);
 }
 static int not_debugging(void) { return 0; }
 /* LuaJIT machine code crashes on iOS (debugger freezes the faulting thread) -> interpreter only */
@@ -466,6 +499,8 @@ int main(int argc, char **argv) {
         else { a = mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE); *ins = 0x52a00028; b = mprotect((void *)pg, 16384, PROT_READ | PROT_EXEC); }
         sys_icache_invalidate(ins, 4); fprintf(stderr, "[ib] dynamic index buffer 32768 -> 65536 (%d %d)\n", a, b); }
       else fprintf(stderr, "[ib] patch: unexpected insn %08x\n", *ins); } }
+  nc_patch("libclient.so", 0x6084d4, 0xbde834, 0xfbe678, 0, (void *)nc_cl);
+  nc_patch("libserver.so", 0x6a2828, 0xd2813c, 0x1007450, 1, (void *)nc_sv);
   int (*jni_onload)(void *, void *) = so_sym(m, "JNI_OnLoad");
   if (jni_onload) jni_onload(jni_vm(), NULL);
   int (*lma)(int, char **) = so_sym(m, "LauncherMainAndroid");
