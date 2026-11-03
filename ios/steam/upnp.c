@@ -63,7 +63,7 @@ static int soap(const char *host, int port, const char *ctl, const char *svc, co
   return code;
 }
 
-static int try_upnp(uint32_t lip, int port, uint32_t *gw_out) {
+static int try_upnp(uint32_t lip, int port, uint32_t *gw_out, char *ext_out, int map) {
   char lips[20]; ipstr(lip, lips);
   int s = udp_sock(1200); if (s < 0) return -1;
   const char *sts[] = { "urn:schemas-upnp-org:device:InternetGatewayDevice:1", "urn:schemas-upnp-org:service:WANIPConnection:1", "urn:schemas-upnp-org:device:InternetGatewayDevice:2", "ssdp:all" };
@@ -106,6 +106,8 @@ static int try_upnp(uint32_t lip, int port, uint32_t *gw_out) {
   char *o = NULL; char ext[40] = "?";
   if (soap(host, hp, ctl, svc, "GetExternalIPAddress", "", &o) == 200 && o) { const char *e = ci_find(o, "<NewExternalIPAddress>"); if (e) { e += 22; int k = 0; while (e[k] && e[k] != '<' && k < 39) { ext[k] = e[k]; k++; } ext[k] = 0; } }
   free(o); o = NULL;
+  if (ext_out) snprintf(ext_out, 40, "%s", ext);
+  if (!map) return 0;
   char args[1024]; int ok = 0, code = 0;
   for (int lease = 0; lease < 2 && !ok; lease++) {
     snprintf(args, sizeof args, "<NewRemoteHost></NewRemoteHost><NewExternalPort>%d</NewExternalPort><NewProtocol>UDP</NewProtocol><NewInternalPort>%d</NewInternalPort><NewInternalClient>%s</NewInternalClient><NewEnabled>1</NewEnabled><NewPortMappingDescription>GMod iOS</NewPortMappingDescription><NewLeaseDuration>%d</NewLeaseDuration>", port, port, lips, lease ? 0 : 7200);
@@ -146,7 +148,7 @@ static void *up_thread(void *arg) {
   if (!lip) { sw_log("[upnp] no Wi-Fi IPv4 address, can't open the router port (mobile data can't host)"); g_up_busy = 0; return NULL; }
   char l[20]; ipstr(lip, l); sw_log("[upnp] hosting on %s %s:%d, asking the router to open the port", ifn, l, port);
   uint32_t gw = 0;
-  if (try_upnp(lip, port, &gw) && try_natpmp(gw ? gw : (lip & 0xFFFFFF00) | 1, port))
+  if (try_upnp(lip, port, &gw, NULL, 1) && try_natpmp(gw ? gw : (lip & 0xFFFFFF00) | 1, port))
     sw_log("[upnp] couldn't open UDP %d automatically. Internet players can't join unless you forward UDP %d to %s in the router settings (or turn on UPnP)", port, port, l);
   g_up_busy = 0; return NULL;
 }
@@ -156,8 +158,58 @@ void up_open_port(int port) {
   pthread_t t; if (pthread_create(&t, NULL, up_thread, NULL)) { g_up_busy = 0; return; } pthread_detach(t);
 }
 
+
+// ---- "can I host over the internet?" checker (launcher). Returns 2 good, 1 maybe, 0 no; fills a readable report.
+#include <netdb.h>
+static int is_priv(uint32_t e) { return (e >> 24) == 10 || (e >> 20) == 0xac1 || (e >> 16) == 0xc0a8 || (e >> 22) == (0x64400000u >> 22) || (e >> 24) == 0; }
+static uint32_t natpmp_ext(uint32_t gw) {
+  int s = udp_sock(800); if (s < 0) return 0;
+  struct sockaddr_in a = {0}; a.sin_family = AF_INET; a.sin_port = htons(5351); a.sin_addr.s_addr = htonl(gw);
+  uint8_t q[2] = {0, 0}, r[16]; uint32_t ip = 0;
+  for (int i = 0; i < 3 && !ip; i++) { sendto(s, q, 2, 0, (void *)&a, sizeof a); ssize_t n = recv(s, r, sizeof r, 0); if (n >= 12 && r[1] == 128 && !r[2] && !r[3]) ip = (uint32_t)r[8] << 24 | r[9] << 16 | r[10] << 8 | r[11]; }
+  close(s); return ip;
+}
+static uint32_t public_ip(void) {
+  const char *hosts[] = { "api.ipify.org", "ipv4.icanhazip.com", "checkip.amazonaws.com" };
+  for (int i = 0; i < 3; i++) {
+    struct addrinfo h = {0}, *r = NULL; h.ai_family = AF_INET; h.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo(hosts[i], "80", &h, &r) || !r) continue;
+    char ip[20]; inet_ntop(AF_INET, &((struct sockaddr_in *)r->ai_addr)->sin_addr, ip, sizeof ip); freeaddrinfo(r);
+    char req[200]; int n = snprintf(req, sizeof req, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", hosts[i]);
+    char *b = http(ip, 80, req, n); if (!b) continue;
+    char *body = strstr(b, "\r\n\r\n"); struct in_addr ia; uint32_t v = 0;
+    if (body) { body += 4; char t[20] = ""; int k = 0; while (*body && k < 19 && ((*body >= '0' && *body <= '9') || *body == '.')) t[k++] = *body++; t[k] = 0; if (inet_pton(AF_INET, t, &ia) == 1) v = ntohl(ia.s_addr); }
+    free(b); if (v) return v;
+  }
+  return 0;
+}
+static int has_vpn(void) {
+  struct ifaddrs *a, *p; int v = 0; if (getifaddrs(&a)) return 0;
+  for (p = a; p; p = p->ifa_next) if (p->ifa_addr && p->ifa_addr->sa_family == AF_INET && (p->ifa_flags & IFF_UP) && (!strncmp(p->ifa_name, "utun", 4) || !strncmp(p->ifa_name, "ipsec", 5) || !strncmp(p->ifa_name, "ppp", 3))) v = 1;
+  freeifaddrs(a); return v;
+}
+int up_check(char *out, size_t n) {
+  char ifn[16] = "", l[20], w[40] = "", pu[20] = "?"; uint32_t gw = 0, wan = 0;
+  uint32_t lip = up_local_ip(ifn, sizeof ifn);
+  if (!lip || strncmp(ifn, "en", 2)) { snprintf(out, n, "Not on Wi-Fi.\nMobile data carriers almost never let anyone connect in, so hosting over the internet won't work. Connect to Wi-Fi and check again."); return 0; }
+  ipstr(lip, l);
+  int vpn = has_vpn();
+  uint32_t pub = public_ip(); if (pub) ipstr(pub, pu);
+  int upnp = try_upnp(lip, 27015, &gw, w, 0) == 0;
+  struct in_addr ia; if (w[0] && inet_pton(AF_INET, w, &ia) == 1) wan = ntohl(ia.s_addr);
+  int pmp = 0; if (!wan) { wan = natpmp_ext(gw ? gw : (lip & 0xFFFFFF00) | 1); pmp = wan != 0; if (wan) ipstr(wan, w); }
+  sw_log("[netcheck] lan %s, vpn %d, public %s, router internet IP %s (upnp %d natpmp %d)", l, vpn, pu, w[0] ? w : "unknown", upnp, pmp);
+  char head[300]; snprintf(head, sizeof head, "Phone: %s\nInternet sees you as: %s\nRouter's internet IP: %s\nAuto port opening (UPnP/NAT-PMP): %s%s\n\n", l, pu, w[0] ? w : "unknown", (upnp || pmp) ? "yes" : "no", vpn ? "\nVPN: ON" : "");
+  if (vpn) { snprintf(out, n, "%sVPN is on. Players would have to connect to the VPN's IP, and normal VPNs don't let anyone in. Turn the VPN off and check again.", head); return 0; }
+  if (wan && is_priv(wan)) { snprintf(out, n, "%sNOPE. Your ISP puts you behind CGNAT (router got a private internet IP), so nobody from the internet can reach you, even with port forwarding.\nFixes: ask the ISP for a public/static (\"white\") IP, use Tailscale/ZeroTier with your friends, or play on a real server. LAN still works.", head); return 0; }
+  if (wan && pub && wan != pub) { snprintf(out, n, "%sProbably NOT. The router's internet IP doesn't match the one the internet sees, so there's another NAT (ISP CGNAT or a 2nd router) in between. Internet players most likely can't reach you.", head); return 0; }
+  if (wan && pub && wan == pub) { snprintf(out, n, "%sLOOKS GOOD. You have a real public IP and the router can open UDP 27015 by itself, so internet players should be able to join when you host. (Can't be 100%% sure without someone actually joining.)", head); return 2; }
+  if (!wan && pub) { snprintf(out, n, "%sDon't know. The router doesn't do UPnP/NAT-PMP, so I can't see its internet IP. Open the router settings: if its WAN/internet IP is %s you're fine, just forward UDP 27015 to %s. If it shows 10.x / 100.64-127.x / 172.16-31.x / 192.168.x, your ISP uses CGNAT and internet hosting won't work.", head, pu, l); return 1; }
+  snprintf(out, n, "%sCouldn't check (no internet?). Try again.", head); return 1;
+}
+
 #ifdef UP_TEST_MAIN
 #include <stdarg.h>
 void sw_log(const char *f, ...) { va_list a; va_start(a, f); vprintf(f, a); va_end(a); putchar('\n'); }
-int main(int c, char **v) { up_open_port(c > 1 ? atoi(v[1]) : 27015); sleep(1); while (g_up_busy) sleep(1); return 0; }
+int main(int c, char **v) { if (c > 1 && !strcmp(v[1], "check")) { char o[1500]; int r = up_check(o, sizeof o); printf("%d\n%s\n", r, o); return 0; } up_open_port(c > 1 ? atoi(v[1]) : 27015); sleep(1); while (g_up_busy) sleep(1); return 0; }
 #endif

@@ -132,6 +132,12 @@ static NSMutableArray<NSString *> *g_args;
   UIButton *fr = [self button:@"Steam friends + invites" action:@selector(openFriends)];
   fr.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; fr.layer.cornerRadius = 12; [fr.heightAnchor constraintEqualToConstant:46].active = YES;
   [self.stack addArrangedSubview:fr];
+  { UILabel *w = [UILabel new]; w.numberOfLines = 0; w.font = [UIFont systemFontOfSize:12]; w.textColor = [UIColor colorWithRed:1 green:0.75 blue:0.3 alpha:1];
+    w.text = @"⚠️ Internet hosting doesn't work on every ISP. A lot of them (and all mobile data) use CGNAT, so nobody can connect to you no matter what. LAN always works. Joining other servers always works.";
+    [self.stack addArrangedSubview:w];
+    UIButton *nc = [self button:@"Can I host over the internet? (check my ISP)" action:@selector(netCheck:)];
+    nc.backgroundColor = [UIColor colorWithWhite:0.16 alpha:1]; nc.layer.cornerRadius = 12; [nc.heightAnchor constraintEqualToConstant:46].active = YES;
+    [self.stack addArrangedSubview:nc]; }
   { extern void mp_launcher_attach(void (^)(NSString *)); mp_launcher_attach(^(NSString *addr) { [self launch:@"connect" target:addr]; }); }
 
   UIButton *ws = [self button:@"Steam Workshop (browser based for now)" action:@selector(openWorkshop)];
@@ -314,10 +320,23 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     message:f.count ? [NSString stringWithFormat:@"Copied to Files → GMod → %@", dst.lastPathComponent] : @"No saves yet, go play first" preferredStyle:1];
   [a addAction:[UIAlertAction actionWithTitle:@"OK" style:0 handler:nil]]; [self presentViewController:a animated:YES completion:nil];
 }
+- (void)netCheck:(UIButton *)btn {
+  NSString *t0 = [btn titleForState:0]; [btn setTitle:@"Checking... (up to ~20 s)" forState:0]; btn.enabled = NO;
+  dispatch_async(dispatch_get_global_queue(0, 0), ^{
+    extern int up_check(char *, size_t); char o[1500]; int r = up_check(o, sizeof o);
+    NSString *m = [NSString stringWithUTF8String:o] ?: @"?";
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [btn setTitle:t0 forState:0]; btn.enabled = YES;
+      NSString *ti = r == 2 ? @"✅ Internet hosting should work" : r == 1 ? @"🤷 Can't tell for sure" : @"❌ Internet hosting won't work";
+      UIAlertController *a = [UIAlertController alertControllerWithTitle:ti message:m preferredStyle:1];
+      [a addAction:[UIAlertAction actionWithTitle:@"OK" style:0 handler:nil]]; [self presentViewController:a animated:YES completion:nil];
+    });
+  });
+}
 - (void)mpTap:(UIButton *)b {
   NSString *act = b.accessibilityIdentifier;
   if ([act isEqual:@"host"]) {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Host a game" message:@"8 slots on the selected map.\nLAN = same Wi-Fi only.\nInternet = Steam friends can join via invite, but your router has to let UDP 27015 in (port forward o algo), otherwise only LAN works" preferredStyle:1];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Host a game" message:@"8 slots on the selected map.\nLAN = same Wi-Fi only.\nInternet = Steam friends can join via invite. The game tries to open UDP 27015 on your router, but it does NOT work on every ISP (CGNAT / mobile data = nobody can join). Use \"Can I host over the internet?\" to check" preferredStyle:1];
     [a addAction:[UIAlertAction actionWithTitle:@"Host LAN" style:0 handler:^(UIAlertAction *x) { [D setBool:NO forKey:@"host_inet"]; [self launch:@"host" target:[D stringForKey:@"gmod_map"] ?: @"gm_construct"]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Host internet (Steam friends)" style:0 handler:^(UIAlertAction *x) { [D setBool:YES forKey:@"host_inet"]; [self launch:@"host" target:[D stringForKey:@"gmod_map"] ?: @"gm_construct"]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]]; [self presentViewController:a animated:YES completion:nil]; return;
