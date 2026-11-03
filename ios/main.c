@@ -212,6 +212,9 @@ static void lua_patch_once(void) {
   uint64_t *c = (uint64_t *)(m->base + 0x26d468); uintptr_t pg = (uintptr_t)c & ~(uintptr_t)16383;
   int r = mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE);
   fprintf(stderr, "[lua] ctr cache was %llx (mprotect %d)\n", (unsigned long long)*c, r); *c = 0x8444c004ULL;
+  /* libclient/libserver are dlopen'ed by the engine later than so_init_all, so patch here (first Lua state) */
+  nc_patch("libclient.so", 0x6084d4, 0xbde834, 0xfbe678, 0, (void *)nc_cl);
+  nc_patch("libserver.so", 0x6a2828, 0xd2813c, 0x1007450, 1, (void *)nc_sv);
   so_module *cl = so_find("libclient.so");
   if (cl) { uint32_t *ins = (uint32_t *)(cl->base + 0x9b6d90); uintptr_t p2 = (uintptr_t)ins & ~(uintptr_t)16383;
     extern void *so_wptr(void *); extern int so_is_mirrored(void *);
@@ -499,8 +502,6 @@ int main(int argc, char **argv) {
         else { a = mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE); *ins = 0x52a00028; b = mprotect((void *)pg, 16384, PROT_READ | PROT_EXEC); }
         sys_icache_invalidate(ins, 4); fprintf(stderr, "[ib] dynamic index buffer 32768 -> 65536 (%d %d)\n", a, b); }
       else fprintf(stderr, "[ib] patch: unexpected insn %08x\n", *ins); } }
-  nc_patch("libclient.so", 0x6084d4, 0xbde834, 0xfbe678, 0, (void *)nc_cl);
-  nc_patch("libserver.so", 0x6a2828, 0xd2813c, 0x1007450, 1, (void *)nc_sv);
   int (*jni_onload)(void *, void *) = so_sym(m, "JNI_OnLoad");
   if (jni_onload) jni_onload(jni_vm(), NULL);
   int (*lma)(int, char **) = so_sym(m, "LauncherMainAndroid");
