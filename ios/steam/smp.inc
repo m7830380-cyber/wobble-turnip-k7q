@@ -258,6 +258,7 @@ static void sm_on(uint32_t e, uint64_t jt, int er, const char *jn, const uint8_t
 static void sm_send_played(void) {
   pthread_mutex_lock(&SM.mu);
   int play = SM.playing && !SM.blocked; uint32_t ip = SM.srv_ip; uint16_t port = SM.srv_port; uint64_t gs = SM.srv_sid; SM.adv_dirty = 0;
+  if (!strncmp(SM.srv, "host:", 5) && SM.pubip) ip = SM.pubip; // hosting: show our server so friends can join
   pthread_mutex_unlock(&SM.mu);
   buf b = {0};
   if (play) { buf g = {0}; if (gs) fvar(&g, 1, gs); ff64(&g, 2, SM_APP);
@@ -265,7 +266,7 @@ static void sm_send_played(void) {
     fsub(&b, 1, &g); }
   fvar(&b, 2, SM_OS);
   sm_send(5410, &b, NULL); free(b.p);
-  sw_log("[mp] games played: %s%s", play ? "GMod" : "nothing", ip ? " (on a server)" : "");
+  { char a[40] = ""; if (ip) sm_ipstr(ip, port, a, sizeof a); sw_log("[mp] games played: %s%s%s", play ? "GMod" : "nothing", ip ? " on server " : "", a); }
 }
 static void sm_send_authlist(void) {
   pthread_mutex_lock(&SM.mu);
@@ -505,8 +506,9 @@ void sm_auth_request(const char *addr, int port, uint64_t ssid, int secure) {
   if (SM.a_state > 0 && !strcmp(key, SM.a_key)) { pthread_mutex_unlock(&SM.mu); return; }
   SM.a_gen++; SM.a_state = 1; SM.a_err[0] = 0; snprintf(SM.a_key, sizeof SM.a_key, "%s", key); SM.a_srvsid = ssid;
   free(SM.a_cookie); SM.a_cookie = NULL; SM.a_cn = 0;
+  if (!(strncmp(SM.srv, "host:", 5) == 0 && sm_private_ip(sm_parse_ip(addr)))) { // joining our own listen server keeps the host ad
   SM.srv_ip = sm_parse_ip(addr); SM.srv_port = (uint16_t)port; SM.srv_sid = ssid; SM.adv_dirty = 1; SM.playing = 1;
-  if (addr && *addr) snprintf(SM.srv, sizeof SM.srv, "%s:%d", addr, port);
+  if (addr && *addr) snprintf(SM.srv, sizeof SM.srv, "%s:%d", addr, port); }
   sm_aj *j = malloc(sizeof *j); j->gen = SM.a_gen; snprintf(j->addr, sizeof j->addr, "%s", addr ? addr : ""); j->port = port; j->ssid = ssid;
   pthread_mutex_unlock(&SM.mu);
   sw_log("[mp] auth request %s", key);
@@ -651,6 +653,14 @@ int sm_invite(uint64_t to, const char *connect) {
   buf b = {0}; ff64(&b, 1, to); ff64(&b, 2, SM.sid); fstr(&b, 3, connect);
   buf h = {0}; fvar(&h, 3, SM_APP);
   int r = sm_send(7005, &b, &h); free(b.p); free(h.p);
+  { // also as a Steam chat game invite (what the real client sends), shows up on PC/phone Steam too
+    char m[300]; snprintf(m, sizeof m, "[gameinvite appid=\"%d\" connect=\"%s\"][/gameinvite]", SM_APP, connect);
+    buf c = {0}; ff64(&c, 1, to); fvar(&c, 2, 1); fstr(&c, 3, m); fvar(&c, 4, 1);
+    pthread_mutex_lock(&SM.mu); uint64_t job = ++SM.job; pthread_mutex_unlock(&SM.mu);
+    buf ch = {0}; ff64(&ch, 10, job); fstr(&ch, 12, "FriendMessages.SendMessage#1");
+    int r2 = sm_send(151, &c, &ch); free(c.p); free(ch.p);
+    sw_log("[mp] chat invite -> %llu (%d)", (unsigned long long)to, r2);
+    if (r) r = r2; }
   sw_log("[mp] invite -> %llu '%s' (%d)", (unsigned long long)to, connect, r);
   return r;
 }
