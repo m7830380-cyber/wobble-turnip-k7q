@@ -32,7 +32,7 @@ jobs:
           $CC -fobjc-arc -c ios/webview.m -o webview.o
           $CC -fobjc-arc -c ios/launcher.m -o launcher.o
           $CC -fobjc-arc -c ios/touchedit.m -o touchedit.o; $CC -fobjc-arc -c ios/lan.m -o lan.o; $CC -fobjc-arc -c ios/kbfix.m -o kbfix.o
-          for f in sw joinws mpjni; do $CC -c ios/steam/$f.c -o st_$f.o; done
+          for f in sw joinws mpjni upnp; do $CC -c ios/steam/$f.c -o st_$f.o; done
           $CC -c ios/dec/LzmaDec.c -o lzmadec.o; $CC -O2 -c ios/dec/zstddeclib.c -o zstddec.o
           $CC -fobjc-arc -c ios/steam/net_ios.m -o st_net.o; $CC -fobjc-arc -c ios/steam/workshop_ui.m -o st_ui.o; $CC -fobjc-arc -c ios/steam/gameinst.m -o st_gi.o; $CC -fobjc-arc -c ios/steam/mp_ui.m -o st_mpui.o
           $CC -o gmod *.o -F$FW -framework SDL2 -framework Foundation -framework UIKit -framework Metal -framework QuartzCore -framework WebKit -framework CoreGraphics -framework UniformTypeIdentifiers -framework Security -lz -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,@executable_path/Frameworks/SDL2.framework -Wl,-rpath,@executable_path/Frameworks/libEGL.framework -Wl,-rpath,@executable_path/Frameworks/libGLESv2.framework

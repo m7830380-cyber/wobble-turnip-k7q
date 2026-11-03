@@ -179,11 +179,12 @@ static void cmd_hook(const char *c) {
 }
 // Steam presence follows what the engine actually does (Play -> multiplayer map, in-game "create game", connect, disconnect)
 static int g_on_server;
+void up_open_port(int port);
 static void line_hook(const char *l) {
   const char *k;
   if ((k = strstr(l, "Network: IP ")) && strstr(k, "mode ")) {
     int sv = 0; const char *pp = strstr(k, "ports "); if (pp) sv = atoi(pp + 6);
-    if (strstr(k, "mode MP") && sv > 0) { sm_set_host(sv); sw_log("[mp] engine: multiplayer game, hosting on port %d", sv); }
+    if (strstr(k, "mode MP") && sv > 0) { sm_set_host(sv); sw_log("[mp] engine: multiplayer game, hosting on port %d", sv); up_open_port(sv); }
     else if (strstr(k, "mode SP")) { sm_set_host(0); sw_log("[mp] engine: singleplayer"); }
     return;
   }

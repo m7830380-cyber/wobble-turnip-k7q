@@ -266,7 +266,23 @@ static void sm_send_played(void) {
     fsub(&b, 1, &g); }
   fvar(&b, 2, SM_OS);
   sm_send(5410, &b, NULL); free(b.p);
-  { char a[40] = ""; if (ip) sm_ipstr(ip, port, a, sizeof a); sw_log("[mp] games played: %s%s%s", play ? "GMod" : "nothing", ip ? " on server " : "", a); }
+  { char a[40] = ""; if (ip) sm_ipstr(ip, port, a, sizeof a); sw_log("[mp] games played: %s%s%s", play ? "GMod" : "nothing", ip ? " on server " : "", a);
+    // Steam doesn't pass game_server_ip on to friends, so also publish rich presence "connect"
+    // (that's what friends' Steam "Join Game" and our friends list read, persona field 71)
+    if (play) {
+      buf kv = {0}; char c[64] = "", st[64];
+      int host = !strncmp(SM.srv, "host:", 5);
+      if (ip) snprintf(c, sizeof c, "+connect %s", a);
+      snprintf(st, sizeof st, "%s", ip ? (host ? "Hosting a server" : "On a server") : "In menu / singleplayer");
+      bput(&kv, "\0RP\0", 4);
+      if (c[0]) { bput(&kv, "\1connect\0", 9); bput(&kv, c, strlen(c) + 1); }
+      bput(&kv, "\1status\0", 8); bput(&kv, st, strlen(st) + 1);
+      bput(&kv, "\x08\x08", 2);
+      buf r = {0}; fbytes(&r, 1, kv.p, kv.n); free(kv.p);
+      buf h = {0}; fvar(&h, 3, SM_APP);
+      sm_send(7501, &r, &h); free(h.p); free(r.p);
+      sw_log("[mp] rich presence: %s%s%s", st, c[0] ? ", " : "", c);
+    } }
 }
 static void sm_send_authlist(void) {
   pthread_mutex_lock(&SM.mu);
