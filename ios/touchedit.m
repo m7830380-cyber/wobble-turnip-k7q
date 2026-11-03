@@ -592,6 +592,7 @@ void cb_present(UIViewController *from, void (^done)(void));
 - (float)aspect { CGSize s = UIScreen.mainScreen.bounds.size; return MAX(s.width, s.height) / MAX(1, MIN(s.width, s.height)); }
 
 - (BOOL)load:(NSString **)err {
+  { extern void te_friends_button(NSString *); te_friends_button(self.user); }
   self.profile = tl_profile_file([self text:[self.user stringByAppendingPathComponent:@"cfg/config.cfg"]]);
   self.file = [self.user stringByAppendingPathComponent:[@"cfg/" stringByAppendingString:self.profile]];
   self.original = [self text:self.file];
@@ -1024,7 +1025,7 @@ static jni_impl_entry g_touch[] = {{0, "openTouchControls", 0, j_openTouchContro
 void touchedit_jni_init(void) { jni_add_impls(g_touch, 1); }
 
 // ---- Steam friends touch button (command gmod_ios_friends, caught from the engine's "Unknown command" line) ----
-#define FRIENDS_LINE @"touch_addbutton \"friends\" \"gmodvr_touch_icons/ios_friends\" \"gmod_ios_friends\" 0.640000 0.000000 0.700000 0.133333 255 255 255 155 8192 1"
+#define FRIENDS_LINE @"touch_addbutton \"friends\" \"gmodvr_touch_icons/ios_friends\" \"gmod_ios_friends\" 0.180000 0.000000 0.240000 0.133333 255 255 255 155 1 1"
 void te_friends_button(NSString *user) {
   NSFileManager *fm = NSFileManager.defaultManager;
   NSString *vp = [user stringByAppendingPathComponent:@"materials/gmodvr_touch_icons/ios_friends.vtf"];
@@ -1037,14 +1038,14 @@ void te_friends_button(NSString *user) {
     atomic_write(vp, vtf_rgba8888(rgba_from_image(im, YES)));
     atomic_write([vp.stringByDeletingPathExtension stringByAppendingPathExtension:@"vmt"], [touch_vmt(@"gmodvr_touch_icons/ios_friends") dataUsingEncoding:NSUTF8StringEncoding]);
   }
-  // existing saved layout without the button -> add it once (into the ⋯ menu). Removing it in the editor keeps it removed.
+  // saved layout without it -> add it as a REMOVED button (flag 1): not on screen, listed in the editor so the user can bring it back
   NSString *prof = tl_profile_file([NSString stringWithContentsOfFile:[user stringByAppendingPathComponent:@"cfg/config.cfg"] encoding:NSUTF8StringEncoding error:nil] ?: @"");
   NSString *file = [user stringByAppendingPathComponent:[@"cfg/" stringByAppendingString:prof]];
   NSString *t = [NSString stringWithContentsOfFile:file encoding:NSUTF8StringEncoding error:nil];
+  // build 148 put it straight into the ⋯ menu -> turn that untouched line into the removed one
+  NSString *old148 = @"touch_addbutton \"friends\" \"gmodvr_touch_icons/ios_friends\" \"gmod_ios_friends\" 0.640000 0.000000 0.700000 0.133333 255 255 255 155 8192 1";
+  if (t && [t containsString:old148]) { atomic_write(file, [[t stringByReplacingOccurrencesOfString:old148 withString:FRIENDS_LINE] dataUsingEncoding:NSUTF8StringEncoding]); return; }
   if (!t || ![t containsString:@"touch_addbutton"] || [t containsString:@"\"friends\""]) return;
-  NSString *mark = [user stringByAppendingPathComponent:@"cfg/.ios_friends_added"];
-  if ([fm fileExistsAtPath:mark]) return;
   atomic_write(file, [[NSString stringWithFormat:@"%@%@%@\n", t, [t hasSuffix:@"\n"] ? @"" : @"\n", FRIENDS_LINE] dataUsingEncoding:NSUTF8StringEncoding]);
-  atomic_write(mark, [NSData data]);
-  fprintf(stderr, "[touch] friends button added to %s\n", prof.UTF8String);
+  fprintf(stderr, "[touch] friends button listed (removed) in %s\n", prof.UTF8String);
 }

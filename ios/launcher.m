@@ -473,6 +473,7 @@ char **ios_run_launcher(const char *docs, const char *wr, int *argc) {
     win = scene ? [[UIWindow alloc] initWithWindowScene:scene] : [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     GLauncher *vc = [GLauncher new]; vc.docs = [NSString stringWithUTF8String:docs];
     win.rootViewController = vc; win.windowLevel = UIWindowLevelNormal + 1;
+    { extern void te_friends_button(NSString *); te_friends_button([NSString stringWithUTF8String:wr]); }
     [win makeKeyAndVisible];
     while (!g_done) CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
     [vc writeCfg:[NSString stringWithUTF8String:wr]];

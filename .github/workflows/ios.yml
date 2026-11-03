@@ -47,7 +47,7 @@ jobs:
           (cd $APP/rt && unzip -q ../../../apk/assets/runtime.zip)
           cp -R ios/bundle/rt_extra/. $APP/rt/
           mkdir -p $APP/touch && python3 tools/vtf2png.py apk/assets/touch_preview $APP/touch && cp apk/assets/touch_default.cfg $APP/touch/
-          cp ios/bundle/touch/*.png $APP/touch/; for f in $APP/touch/touch_default.cfg $APP/rt/cfg/touch_default.cfg; do [ -f $f ] && printf '\n%s\n' 'touch_addbutton "friends" "gmodvr_touch_icons/ios_friends" "gmod_ios_friends" 0.640000 0.000000 0.700000 0.133333 255 255 255 155 8192 1' >> $f; done; ls $APP/touch | wc -l
+          cp ios/bundle/touch/*.png $APP/touch/; for f in $APP/touch/touch_default.cfg $APP/rt/cfg/touch_default.cfg; do [ -f $f ] && printf '\n%s\n' 'touch_addbutton "friends" "gmodvr_touch_icons/ios_friends" "gmod_ios_friends" 0.180000 0.000000 0.240000 0.133333 255 255 255 155 1 1' >> $f; done; ls $APP/touch | wc -l
           codesign --entitlements ${3:-ios/entitlements.plist} --sign - --force --deep $APP
           codesign -d --entitlements - $APP/gmod || true
           otool -L $APP/gmod; for f in $APP/Frameworks/*.framework; do otool -L $f/$(basename $f .framework) | head -5; done; otool -l $APP/gmod | grep -A3 LC_RPATH || true
