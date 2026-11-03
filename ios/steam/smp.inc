@@ -560,7 +560,7 @@ static void *smd_thread(void *a) {
   sm_dir *d = a; char err[300];
   if (sm_wait_up(40, err, sizeof err)) { smd_add(d, "error=%s", err); goto done; }
   {
-    buf q = {0}; fvar(&q, 1, SM_APP); fvar(&q, 3, 255); fstr(&q, 4, "\\appid\\4000"); fvar(&q, 5, 20000);
+    buf q = {0}; fvar(&q, 1, SM_APP); fvar(&q, 3, 255); fstr(&q, 4, "\\appid\\4000\\nand\\1\\secure\\1"); /* hide VAC servers: the port is always insecure */ fvar(&q, 5, 20000);
     buf b = {0}; fvar(&b, 1, SM_APP); fsub(&b, 2, &q);
     uint8_t *o; size_t on; int er;
     int r = sm_call(151, &b, "GameServers.MasterServerQuery#1", &o, &on, &er, 30); free(b.p);
