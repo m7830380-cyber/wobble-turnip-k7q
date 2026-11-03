@@ -200,7 +200,10 @@ static void line_hook(const char *l) {
      but its IsConnected check fails here, so it prints "Unknown command: noclip" and drops it. Forward it ourselves. */
   if (g_on_server && (k = strstr(l, "Unknown command: ")) && !strstr(l, "gmod_ios_")) {
     char c[64]; k += 17; int n = 0; while (k[n] && k[n] != '\n' && k[n] != ' ' && k[n] != '"' && k[n] != ';' && n < 63) n++; c[n] = 0; memcpy(c, k, n);
-    if (n > 0) { sw_log("[mp] forwarding '%s' to the server", c); engine_cmd([NSString stringWithFormat:@"cmd %s", c]); }
+    /* GMod servers toggle noclip from usercmd impulse 154 (server ProcessMovement: impulse==0x9a -> PlayerNoClip hook -> MOVETYPE_NOCLIP),
+       not from a "noclip" string command, so "cmd noclip" did nothing. */
+    if (n > 0 && !strcmp(c, "noclip")) { sw_log("[mp] noclip -> impulse 154"); engine_cmd(@"impulse 154"); }
+    else if (n > 0) { sw_log("[mp] forwarding '%s' to the server", c); engine_cmd([NSString stringWithFormat:@"cmd %s", c]); }
   }
 }
 // called right before the engine starts
