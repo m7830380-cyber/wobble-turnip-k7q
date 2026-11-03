@@ -1,3 +1,4 @@
+#include <time.h>
 #include <math.h>
 #include <dirent.h>
 #include <libkern/OSCacheControl.h>
@@ -190,7 +191,41 @@ static void nc_move(int w, void *gm, float factor) {
   float ft = *(float *)((char *)**nc_globals[w] + 16), *vel = (float *)(mv + 72), *org = (float *)(mv + 200);
   for (int i = 0; i < 3; i++) { vel[i] = wv[i] * lw * sp; org[i] += vel[i] * ft; }
 }
-static void nc_cl(void *gm, float factor, float accel) { (void)accel; nc_move(0, gm, factor); }
+static double nc_now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec + t.tv_nsec * 1e-9; }
+static double nc_seen;  /* last time client prediction ran noclip movement */
+static void nc_cl(void *gm, float factor, float accel) { (void)accel; nc_seen = nc_now(); nc_move(0, gm, factor); }
+/* Retail noclip normalizes fwd*fm and right*sm separately, so any stick angle becomes one of 8 directions (feels like WASD).
+   While noclipping, dither each usercmd between the two nearest 45-degree directions (error diffusion), so the average
+   path follows the joystick. Server and prediction both see the same cmds -> no rubber-banding.
+   ClientModeShared::CreateMove(this, frametime, CUserCmd *) wrapper libclient 0x5b8d1c; cmd forwardmove +28, sidemove +32. */
+static int (*nc_cm_orig)(void *, float, void *);
+static int nc_cm(void *self, float ft, void *cmd) {
+  int r = nc_cm_orig(self, ft, cmd);
+  if (cmd && nc_now() - nc_seen < 0.25) {
+    float *fm = (float *)((char *)cmd + 28), *sm = (float *)((char *)cmd + 32), mag = sqrtf(*fm * *fm + *sm * *sm);
+    if (mag > 1.f) {
+      static float acc; const float q = (float)M_PI / 4.f;
+      float th = atan2f(*sm, *fm) / q, k = floorf(th), t = th - k;
+      acc += t; float d = k; if (acc >= 1.f) { acc -= 1.f; d = k + 1.f; }
+      float c = cosf(d * q), sn = sinf(d * q);
+      *fm = fabsf(c) < 0.01f ? 0.f : c * mag; *sm = fabsf(sn) < 0.01f ? 0.f : sn * mag;
+    }
+  }
+  return r;
+}
+static void nc_cm_patch(void) {
+  so_module *mm = so_find("libclient.so"); if (!mm) return;
+  uint32_t *fnc = (uint32_t *)(mm->base + 0x5b8d1c);
+  if (fnc[0] != 0xfc1e0fe8 || fnc[1] != 0xa900fbfd) { fprintf(stderr, "[noclip] CreateMove: unexpected %08x\n", fnc[0]); return; }
+  nc_cm_orig = (void *)fnc; int n = 0;
+  uintptr_t slots[2] = {0xe0d110, 0xe9f038};
+  for (int i = 0; i < 2; i++) { void **sl = (void **)(mm->base + slots[i]);
+    if (*sl != (void *)fnc) { fprintf(stderr, "[noclip] vtable slot %lx = %p, skipped\n", (unsigned long)slots[i], *sl); continue; }
+    uintptr_t pg = (uintptr_t)sl & ~(uintptr_t)16383; mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE);
+    *sl = (void *)nc_cm; n++; }
+  fprintf(stderr, "[noclip] joystick any-direction dither on (%d slots)\n", n);
+}
+
 static void nc_sv(void *gm, float factor, float accel) { (void)accel; nc_move(1, gm, factor); }
 static void nc_patch(const char *lib, uintptr_t fo, uintptr_t av, uintptr_t gl, int w, void *fnp) {
   so_module *mm = so_find(lib); if (!mm) { fprintf(stderr, "[noclip] %s not loaded\n", lib); return; }
@@ -215,6 +250,7 @@ static void lua_patch_once(void) {
   /* libclient/libserver are dlopen'ed by the engine later than so_init_all, so patch here (first Lua state) */
   nc_patch("libclient.so", 0x6084d4, 0xbde834, 0xfbe678, 0, (void *)nc_cl);
   nc_patch("libserver.so", 0x6a2828, 0xd2813c, 0x1007450, 1, (void *)nc_sv);
+  nc_cm_patch();
   so_module *cl = so_find("libclient.so");
   if (cl) { uint32_t *ins = (uint32_t *)(cl->base + 0x9b6d90); uintptr_t p2 = (uintptr_t)ins & ~(uintptr_t)16383;
     extern void *so_wptr(void *); extern int so_is_mirrored(void *);
