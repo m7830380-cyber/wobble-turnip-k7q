@@ -142,10 +142,13 @@ static int pub4(const struct sockaddr_storage *s, uint32_t *ip, int *port) {
   *ip = a; *port = ntohs(i->sin_port); return 1;
 }
 static void ndiag(const char *what, const struct sockaddr_storage *s, long r, int e) {
-  static uint32_t lip[2]; static int cnt[2]; static time_t t0[2]; int k = what[0] == 'r';
+  static uint32_t lip[2]; static int cnt[2]; static long byt[2]; static time_t t0[2]; int k = what[0] == 'r';
   uint32_t ip; int port; if (!pub4(s, &ip, &port)) return;
   time_t now = time(NULL);
-  if (ip != lip[k] || now - t0[k] >= 10) { if (cnt[k] > 1) fprintf(stderr, "[net] %s x%d more\n", what, cnt[k] - 1); lip[k] = ip; cnt[k] = 0; t0[k] = now; }
+  if (ip != lip[k] || now - t0[k] >= 10) {
+    if (cnt[k] > 1) fprintf(stderr, "[net] %s x%d more, %ld KB in %ds (%ld KB/s)\n", what, cnt[k] - 1, byt[k] / 1024, (int)(now - t0[k]), now > t0[k] ? byt[k] / 1024 / (now - t0[k]) : 0);
+    lip[k] = ip; cnt[k] = 0; byt[k] = 0; t0[k] = now; }
+  if (r > 0) byt[k] += r;
   if (cnt[k]++ == 0 || r < 0)
     fprintf(stderr, "[net] %s %u.%u.%u.%u:%d -> %ld%s%s\n", what, ip >> 24, (ip >> 16) & 255, (ip >> 8) & 255, ip & 255, port, r, r < 0 ? " " : "", r < 0 ? strerror(e) : "");
 }

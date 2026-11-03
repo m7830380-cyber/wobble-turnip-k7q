@@ -421,6 +421,8 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
     if (![user containsObject:@"-height"] && ![user containsObject:@"-h"]) [a addObjectsFromArray:@[@"-h", @(h).stringValue]]; }
   if (bv(@"console", YES) && ![user containsObject:@"-console"]) [a addObject:@"-console"];
   [a addObjectsFromArray:@[@"+exec", @"android_settings.cfg"]];
+  // engine default "rate" is 30000 bytes/s -> big servers (Metastruct) need minutes to send signon/Lua on first join
+  if (![user containsObject:@"+rate"]) [a addObjectsFromArray:@[@"+rate", @"1048576"]];
   [a addObjectsFromArray:@[@"+hlvr_disable_player_ally_collisions", bv(@"gmod_npc_walkthrough", NO) ? @"2" : @"0",
                            @"+gmodvr_walk_anim", bv(@"gmod_walk_anim", NO) ? @"1" : @"0",
                            @"+snd_flat_mute_use_deny", bv(@"gmod_mute_failed_grab", NO) ? @"1" : @"0"]];
