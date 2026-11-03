@@ -102,6 +102,7 @@ static NSString *assetURL(NSString *s) {
 }
 - (void)snap {
   if (self.snapping || self.closed || !self.web) return;
+  [g_lock lock]; BOOL pending = self.pixels != nil; [g_lock unlock]; if (pending) return;  // engine hasn't taken the last frame yet
   CFTimeInterval now = CACurrentMediaTime(); if (now - self.lastSnap < 0.033) return;
   self.snapping = YES; self.lastSnap = now;
   WKSnapshotConfiguration *c = [WKSnapshotConfiguration new];
@@ -286,44 +287,44 @@ static void wv_destroy(int id) {
 /* ---------- JNI glue ---------- */
 #define J(name) static jvalue name(void *env, void *thiz, jvalue *a)
 #define S(i) ([NSString stringWithUTF8String:jni_str(a[i].l) ?: ""])
-J(j_create2) { (void)env; (void)thiz; jvalue r = {0}; r.i = wv_create(a[0].i, a[1].i, YES); return r; }
-J(j_create3) { (void)env; (void)thiz; jvalue r = {0}; r.i = wv_create(a[0].i, a[1].i, a[2].z); return r; }
-J(j_create4) { (void)env; (void)thiz; jvalue r = {0}; r.i = wv_create(a[0].i, a[1].i, a[2].z); return r; }
-J(j_command) { (void)env; (void)thiz; wv_command(a[0].i, a[1].i, S(2), a[3].i, a[4].i); jvalue r = {0}; return r; }
-J(j_navigate) { (void)env; (void)thiz; wv_command(a[0].i, 0, S(1), 0, 0); jvalue r = {0}; return r; }
-J(j_html) { (void)env; (void)thiz; wv_command(a[0].i, 1, S(1), 0, 0); jvalue r = {0}; return r; }
-J(j_script) { (void)env; (void)thiz; wv_command(a[0].i, 2, S(1), 0, 0); jvalue r = {0}; return r; }
-J(j_resize) { (void)env; (void)thiz; wv_command(a[0].i, 3, @"", a[1].i, a[2].i); jvalue r = {0}; return r; }
-J(j_stop) { (void)env; (void)thiz; wv_command(a[0].i, 4, @"", 0, 0); jvalue r = {0}; return r; }
-J(j_wheel) { (void)env; (void)thiz; wv_command(a[0].i, 5, @"", a[1].i, 0); jvalue r = {0}; return r; }
-J(j_text) { (void)env; (void)thiz; wv_command(a[0].i, 7, S(1), 0, 0); jvalue r = {0}; return r; }
-J(j_key) { (void)env; (void)thiz; (void)a; jvalue r = {0}; return r; }
-J(j_destroy) { (void)env; (void)thiz; wv_destroy(a[0].i); jvalue r = {0}; return r; }
-J(j_setForeground) { (void)env; (void)thiz; (void)a; jvalue r = {0}; return r; }
-J(j_pointer) { (void)env; (void)thiz;
+J(j_create2) { @autoreleasepool { (void)env; (void)thiz; jvalue r = {0}; r.i = wv_create(a[0].i, a[1].i, YES); return r; } }
+J(j_create3) { @autoreleasepool { (void)env; (void)thiz; jvalue r = {0}; r.i = wv_create(a[0].i, a[1].i, a[2].z); return r; } }
+J(j_create4) { @autoreleasepool { (void)env; (void)thiz; jvalue r = {0}; r.i = wv_create(a[0].i, a[1].i, a[2].z); return r; } }
+J(j_command) { @autoreleasepool { (void)env; (void)thiz; wv_command(a[0].i, a[1].i, S(2), a[3].i, a[4].i); jvalue r = {0}; return r; } }
+J(j_navigate) { @autoreleasepool { (void)env; (void)thiz; wv_command(a[0].i, 0, S(1), 0, 0); jvalue r = {0}; return r; } }
+J(j_html) { @autoreleasepool { (void)env; (void)thiz; wv_command(a[0].i, 1, S(1), 0, 0); jvalue r = {0}; return r; } }
+J(j_script) { @autoreleasepool { (void)env; (void)thiz; wv_command(a[0].i, 2, S(1), 0, 0); jvalue r = {0}; return r; } }
+J(j_resize) { @autoreleasepool { (void)env; (void)thiz; wv_command(a[0].i, 3, @"", a[1].i, a[2].i); jvalue r = {0}; return r; } }
+J(j_stop) { @autoreleasepool { (void)env; (void)thiz; wv_command(a[0].i, 4, @"", 0, 0); jvalue r = {0}; return r; } }
+J(j_wheel) { @autoreleasepool { (void)env; (void)thiz; wv_command(a[0].i, 5, @"", a[1].i, 0); jvalue r = {0}; return r; } }
+J(j_text) { @autoreleasepool { (void)env; (void)thiz; wv_command(a[0].i, 7, S(1), 0, 0); jvalue r = {0}; return r; } }
+J(j_key) { @autoreleasepool { (void)env; (void)thiz; (void)a; jvalue r = {0}; return r; } }
+J(j_destroy) { @autoreleasepool { (void)env; (void)thiz; wv_destroy(a[0].i); jvalue r = {0}; return r; } }
+J(j_setForeground) { @autoreleasepool { (void)env; (void)thiz; (void)a; jvalue r = {0}; return r; } }
+J(j_pointer) { @autoreleasepool { (void)env; (void)thiz;
   // pointer(id, action, x, y, button)  [Java: lambda(i5=button, i2=action, x, y, id)]
-  wv_pointer(a[0].i, a[1].i, a[2].i, a[3].i, a[4].i); jvalue r = {0}; return r; }
-J(j_bind) { (void)env; (void)thiz;
+  wv_pointer(a[0].i, a[1].i, a[2].i, a[3].i, a[4].i); jvalue r = {0}; return r; } }
+J(j_bind) { @autoreleasepool { (void)env; (void)thiz;
   int id = a[0].i; NSString *o = S(1), *f = S(2);
   onMain(^{ GPage *p = page(id); if (!p) return; p.bindings[[NSString stringWithFormat:@"%@\x1f%@", o, f]] = @[ o, f ]; [p installBindings]; });
-  jvalue r = {0}; return r; }
-J(j_reply) { (void)env; (void)thiz;
-  wv_js(a[0].i, [NSString stringWithFormat:@"window.__gmodReply&&window.__gmodReply(%d,%@);", a[1].i, S(2)]); jvalue r = {0}; return r; }
-J(j_events) { (void)env; (void)thiz;
+  jvalue r = {0}; return r; } }
+J(j_reply) { @autoreleasepool { (void)env; (void)thiz;
+  wv_js(a[0].i, [NSString stringWithFormat:@"window.__gmodReply&&window.__gmodReply(%d,%@);", a[1].i, S(2)]); jvalue r = {0}; return r; } }
+J(j_events) { @autoreleasepool { (void)env; (void)thiz;
   GPage *p = page(a[0].i); NSArray *ev = @[];
   if (p) { [g_lock lock]; NSUInteger n = MIN((NSUInteger)128, p.events.count); ev = [p.events subarrayWithRange:NSMakeRange(0, n)];
     [p.events removeObjectsInRange:NSMakeRange(0, n)]; [g_lock unlock]; }
   jobj *arr = jni_new_array((int)ev.count, 8, "[Ljava/lang/String;");
   void **d = (void **)jni_array_bytes(arr, NULL);
   for (NSUInteger i = 0; i < ev.count; i++) d[i] = jni_new_string([ev[i] UTF8String]);
-  jvalue r = {0}; r.l = arr; return r; }
-J(j_pixels) { (void)env; (void)thiz;
+  jvalue r = {0}; r.l = arr; return r; } }
+J(j_pixels) { @autoreleasepool { (void)env; (void)thiz;
   GPage *p = page(a[0].i); jvalue r = {0}; if (!p) return r;
   [g_lock lock]; NSData *d = p.pixels; p.pixels = nil; [g_lock unlock];
   if (!d) return r;
   if (!p.arr || p.arrLen != (int)d.length) { p.arr = jni_new_array((int)d.length, 1, "[B"); p.arrLen = (int)d.length; }  // reused: engine copies it out
   memcpy((void *)jni_array_bytes(p.arr, NULL), d.bytes, d.length);
-  r.l = p.arr; return r; }
+  r.l = p.arr; return r; } }
 
 #define C "com/sourcevrport/platform/GModWebView"
 static jni_impl_entry g_wv[] = {
