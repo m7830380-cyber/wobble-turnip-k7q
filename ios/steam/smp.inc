@@ -437,8 +437,15 @@ void sm_set_playing(int on) { pthread_mutex_lock(&SM.mu); SM.playing = on; SM.ad
 void sm_set_host(int port) { // hosting a listen server: invites point to our public ip
   pthread_mutex_lock(&SM.mu);
   if (port > 0) { SM.srv_port = (uint16_t)port; SM.srv_ip = 0; SM.srv_sid = 0; snprintf(SM.srv, sizeof SM.srv, "host:%d", port); }
-  else SM.srv[0] = 0;
+  else { SM.srv[0] = 0; SM.srv_ip = 0; SM.srv_port = 0; SM.srv_sid = 0; }
+  SM.playing = 1; SM.adv_dirty = 1;
   pthread_mutex_unlock(&SM.mu);
+}
+void sm_set_server(const char *addr, int port) { // joined a remote server (seen in the engine log)
+  pthread_mutex_lock(&SM.mu);
+  if (addr && *addr) { SM.srv_ip = sm_parse_ip(addr); SM.srv_port = (uint16_t)port; SM.srv_sid = 0; snprintf(SM.srv, sizeof SM.srv, "%s:%d", addr, port); }
+  else { SM.srv_ip = 0; SM.srv_port = 0; SM.srv_sid = 0; SM.srv[0] = 0; }
+  SM.playing = 1; SM.adv_dirty = 1; pthread_mutex_unlock(&SM.mu);
 }
 int sm_server(char *o, size_t on) { // current "+connect" target for invites
   pthread_mutex_lock(&SM.mu); int ok = 0;

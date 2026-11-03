@@ -108,7 +108,7 @@ static NSString *assetURL(NSString *s) {
   c.rect = self.web.bounds; c.afterScreenUpdates = NO;
   c.snapshotWidth = @(self.width / UIScreen.mainScreen.scale);
   int w = self.width, h = self.height;
-  [self.web takeSnapshotWithConfiguration:c completionHandler:^(UIImage *img, NSError *err) {
+  [self.web takeSnapshotWithConfiguration:c completionHandler:^(UIImage *img, NSError *err) { @autoreleasepool {
     self.snapping = NO;
     if (!img || self.closed) return;
     NSMutableData *d = [NSMutableData dataWithLength:(size_t)w * h * 4];
@@ -124,7 +124,7 @@ static NSString *assetURL(NSString *s) {
       if (a != 255) for (int k = 0; k < 3; k++) p[i + k] = a ? (uint8_t)MIN(255u, (p[i + k] * 255u + a / 2) / a) : 0;
     }
     [g_lock lock]; self.pixels = d; [g_lock unlock];
-  }];
+  } }];
 }
 @end
 
@@ -183,7 +183,7 @@ static NSData *readFile(NSString *rel) {
 @interface GTick : NSObject
 @end
 @implementation GTick
-- (void)tick { [g_lock lock]; NSArray *ps = g_pages.allValues; [g_lock unlock]; for (GPage *p in ps) [p snap]; }
+- (void)tick { @autoreleasepool { [g_lock lock]; NSArray *ps = g_pages.allValues; [g_lock unlock]; for (GPage *p in ps) [p snap]; } }
 @end
 static GTick *g_tick;
 

@@ -294,9 +294,11 @@ static int b_system_property_get(const char *k, char *v) {
   return (int)strlen(v);
 }
 static const char *prio(int p) { static const char *n = "??VDIWEF"; static __thread char s[2]; s[0] = (p >= 0 && p < 8) ? n[p] : '?'; return s; }
-void (*bionic_cmd_hook)(const char *cmd);  // engine prints Unknown command "x" for our own touch commands
+void (*bionic_cmd_hook)(const char *cmd);
+void (*bionic_line_hook)(const char *line);  // every engine log line (Steam presence follows connect/host state)  // engine prints Unknown command "x" for our own touch commands
 static int b_log_write(int p, const char *tag, const char *msg) {
   if (bionic_cmd_hook && msg) { const char *u = strstr(msg, "gmod_ios_"); if (u && strstr(msg, "Unknown command")) { char c[64]; const char *s = u; size_t i = 0; while (s[i] && s[i] != '"' && s[i] > ' ' && i < 63) { c[i] = s[i]; i++; } c[i] = 0; bionic_cmd_hook(c); } }
+  if (bionic_line_hook && msg) bionic_line_hook(msg);
   fprintf(stderr, "%s/%s: %s\n", prio(p), tag ? tag : "", msg); return 1; }
 static int b_log_print(int p, const char *tag, const char *fmt, ...) {
   char b[4096]; va_list a; va_start(a, fmt); vsnprintf(b, sizeof b, fmt, a); va_end(a); return b_log_write(p, tag, b);

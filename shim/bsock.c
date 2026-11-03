@@ -132,14 +132,34 @@ static int b_getpeername(int fd, void *a, socklen_t *l) {
 }
 static long b_send(int fd, const void *b, size_t n, int f) { RET(send(fd, b, n, msgf(f))); }
 static long b_recv(int fd, void *b, size_t n, int f) { RET(recv(fd, b, n, msgf(f))); }
+#include <stdio.h>
+#include <time.h>
+// diag: UDP to/from internet (non-private) IPv4 peers -> "[net]" lines, rate limited
+static int pub4(const struct sockaddr_storage *s, uint32_t *ip, int *port) {
+  if (((const struct sockaddr *)s)->sa_family != AF_INET) return 0;
+  const struct sockaddr_in *i = (const struct sockaddr_in *)s; uint32_t a = ntohl(i->sin_addr.s_addr);
+  if ((a >> 24) == 10 || (a >> 24) == 127 || (a >> 16) == 0xc0a8 || (a >> 20) == 0xac1 || (a >> 16) == 0xa9fe || !a || a == 0xffffffff || (a >> 28) == 14) return 0;
+  *ip = a; *port = ntohs(i->sin_port); return 1;
+}
+static void ndiag(const char *what, const struct sockaddr_storage *s, long r, int e) {
+  static uint32_t lip[2]; static int cnt[2]; static time_t t0[2]; int k = what[0] == 'r';
+  uint32_t ip; int port; if (!pub4(s, &ip, &port)) return;
+  time_t now = time(NULL);
+  if (ip != lip[k] || now - t0[k] >= 10) { if (cnt[k] > 1) fprintf(stderr, "[net] %s x%d more\n", what, cnt[k] - 1); lip[k] = ip; cnt[k] = 0; t0[k] = now; }
+  if (cnt[k]++ == 0 || r < 0)
+    fprintf(stderr, "[net] %s %u.%u.%u.%u:%d -> %ld%s%s\n", what, ip >> 24, (ip >> 16) & 255, (ip >> 8) & 255, ip & 255, port, r, r < 0 ? " " : "", r < 0 ? strerror(e) : "");
+}
 static long b_sendto(int fd, const void *b, size_t n, int f, const void *a, socklen_t l) {
   struct sockaddr_storage s; if (a) l = sa_in(a, l, &s);
-  RET(sendto(fd, b, n, msgf(f), a ? (struct sockaddr *)&s : NULL, a ? l : 0));
+  long r = sendto(fd, b, n, msgf(f), a ? (struct sockaddr *)&s : NULL, a ? l : 0); int e = errno;
+  if (a) ndiag("udp send", &s, r, e);
+  if (r < 0) errno = lerr(e); return r;
 }
 static long b_recvfrom(int fd, void *b, size_t n, int f, void *a, socklen_t *l) {
   struct sockaddr_storage s; socklen_t sl = sizeof s;
   long r = recvfrom(fd, b, n, msgf(f), (struct sockaddr *)&s, &sl);
   if (r < 0) { errno = lerr(errno); return r; }
+  if (sl) ndiag("udp recv", &s, r, 0);
   if (a && l) { if (sl) sa_out(&s, sl, a, l); else *l = 0; }
   return r;
 }

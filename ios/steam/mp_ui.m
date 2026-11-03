@@ -177,9 +177,27 @@ static void cmd_hook(const char *c) {
   static double last; double now = CFAbsoluteTimeGetCurrent(); if (now - last < 0.6) return; last = now;
   dispatch_async(dispatch_get_main_queue(), ^{ UIViewController *v = top_vc(); if (v && ![v isKindOfClass:UINavigationController.class]) { extern void SDL_StopTextInput(void); SDL_StopTextInput(); mp_friends_present(v); } });
 }
+// Steam presence follows what the engine actually does (Play -> multiplayer map, in-game "create game", connect, disconnect)
+static void line_hook(const char *l) {
+  const char *k;
+  if ((k = strstr(l, "Network: IP ")) && strstr(k, "mode ")) {
+    int sv = 0; const char *pp = strstr(k, "ports "); if (pp) sv = atoi(pp + 6);
+    if (strstr(k, "mode MP") && sv > 0) { sm_set_host(sv); sw_log("[mp] engine: multiplayer game, hosting on port %d", sv); }
+    else if (strstr(k, "mode SP")) { sm_set_host(0); sw_log("[mp] engine: singleplayer"); }
+    return;
+  }
+  if ((k = strstr(l, "Connecting to ")) && strstr(k, "...")) {
+    char a[96]; k += 14; const char *e = strstr(k, "..."); int n = (int)(e - k); if (n <= 0 || n > 95) return; memcpy(a, k, n); a[n] = 0;
+    if (!strncmp(a, "localhost", 9) || !strncmp(a, "loopback", 8) || !strncmp(a, "127.", 4)) return;
+    char *c = strrchr(a, ':'); int port = 27015; if (c) { port = atoi(c + 1); *c = 0; }
+    sm_set_server(a, port); sw_log("[mp] engine: joining %s:%d", a, port); return;
+  }
+  if (strstr(l, "Host_Disconnect( bShowMainMenu=1")) { sm_set_host(0); sw_log("[mp] engine: back to menu"); }
+}
 // called right before the engine starts
 void mp_game_start(int host_port) {
   extern void (*bionic_cmd_hook)(const char *); bionic_cmd_hook = cmd_hook;
+  extern void (*bionic_line_hook)(const char *); bionic_line_hook = line_hook;
   g_ingame = 1; mp_boot();
   if (!gi_steam_user()) return;
   sm_set_playing(1);
