@@ -11,7 +11,7 @@ jobs:
       - name: Fetch owner dylibs (A8) + SDL headers
         run: |
           R=https://github.com/m7830380-cyber/wobble-turnip-k7q/releases/download/a8
-          curl -sfL -o gios.ipa $R/GiOS-0.1.31_A8.ipa
+          curl -sfL -o gios.ipa $R/GiOS-0.1.31_A8-test.ipa
           curl -sfL -o extra.zip $R/a8extra.zip
           unzip -q gios.ipa -d o; mkdir ex && (cd ex && unzip -q ../extra.zip)
           ls o/Payload/GiOS.app/Frameworks | wc -l
