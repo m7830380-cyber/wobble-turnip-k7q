@@ -206,11 +206,7 @@ static int nc_cm(void *self, float ft, void *cmd) {
     if (mag > 1.f) {
       static float acc; const float q = (float)M_PI / 4.f;
       float th = atan2f(*sm, *fm) / q, k = floorf(th), t = th - k;
-      /* within ~15 degrees of one of the 8 directions just go that way: dithering a small offset meant mostly straight
-         with a 45-degree pop every few ticks = the left/right twitch when flying fast */
-      float d;
-      if (t < 0.33f) { d = k; acc = 0; } else if (t > 0.67f) { d = k + 1.f; acc = 0; }
-      else { acc += t; d = k; if (acc >= 1.f) { acc -= 1.f; d = k + 1.f; } }
+      acc += t; float d = k; if (acc >= 1.f) { acc -= 1.f; d = k + 1.f; }
       float c = cosf(d * q), sn = sinf(d * q);
       *fm = fabsf(c) < 0.01f ? 0.f : c * mag; *sm = fabsf(sn) < 0.01f ? 0.f : sn * mag;
     }
