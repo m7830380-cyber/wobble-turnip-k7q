@@ -3,7 +3,9 @@
 // incoming invite popups (launcher + in game), small in-game friends button, avatar decoding for the engine.
 #import <UIKit/UIKit.h>
 #include "sw.h"
+#ifndef GM_DYLIB
 #include "../../loader/elf_loader.h"
+#endif
 
 extern NSString *gi_steam_user(void);
 extern NSString *gi_steam_token(void);
@@ -44,12 +46,16 @@ void mp_boot(void) {
 
 // ---------- engine console ----------
 static void engine_cmd(NSString *cmd) {
+#ifdef GM_DYLIB
+  fprintf(stderr, "[mp] console (not wired in dylib mode yet): %s\n", cmd.UTF8String);
+#else
   so_module *m = so_find("libengine.so"); if (!m) return;
   uint32_t *f = (uint32_t *)(m->base + 0x29fc58); // Cbuf_AddText (0.1.31): stp x29,x30,[sp,#-48]!
   if (*f != 0xa9bd7bfd) { fprintf(stderr, "[mp] Cbuf_AddText not found (%08x)\n", *f); return; }
   const char *s = [[cmd stringByAppendingString:@"\n"] UTF8String];
   ((void (*)(const char *))f)(s);
   fprintf(stderr, "[mp] console: %s\n", cmd.UTF8String);
+#endif
 }
 static void join_addr(NSString *addr) {
   if (!addr.length) return;

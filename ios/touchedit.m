@@ -992,6 +992,14 @@ void cb_present(UIViewController *from, void (^done)(void)) {
 
 #pragma mark - in-game hook (GameActivity.openTouchControls)
 
+#ifdef GM_DYLIB
+#include <dlfcn.h>
+static void notify_changed(void) {  // liblauncher.dylib reloads the touch layout on its next frame
+  void (*f)(void) = (void (*)(void))dlsym(RTLD_DEFAULT, "GiOS_NotifyTouchControlsChanged");
+  fprintf(stderr, "[touch] controls changed -> native %p\n", (void *)f);
+  if (f) f();
+}
+#else
 #include "../shim/jni_fake.h"
 #include "../loader/elf_loader.h"
 static void notify_changed(void) {
@@ -1000,6 +1008,7 @@ static void notify_changed(void) {
   fprintf(stderr, "[touch] controls changed -> native %p\n", (void *)f);
   if (f) f(jni_env(), NULL);
 }
+#endif
 static UIViewController *top_vc(void) {
   UIViewController *v = nil;
   for (UIScene *s in UIApplication.sharedApplication.connectedScenes) if ([s isKindOfClass:UIWindowScene.class])
@@ -1007,9 +1016,8 @@ static UIViewController *top_vc(void) {
   while (v.presentedViewController) v = v.presentedViewController;
   return v;
 }
-static jvalue j_openTouchControls(void *env, void *thiz, jvalue *a) {
-  (void)env; (void)thiz; jvalue r = {0};
-  const char *s = a ? jni_str(a[0].l) : NULL; NSString *arg = s ? @(s) : @"";
+void ios_touch_open(const char *s) {
+  NSString *arg = s ? @(s) : @"";
   BOOL custom = [[arg componentsSeparatedByString:@"\n"].firstObject isEqual:@"custom"];
   const char *wr = getenv("SOURCEVR_WRITE_GAME_PATH"); NSString *user = wr ? @(wr) : nil;
   fprintf(stderr, "[touch] openTouchControls '%s'\n", s ? s : "");
@@ -1019,10 +1027,16 @@ static jvalue j_openTouchControls(void *env, void *thiz, jvalue *a) {
     if (custom) cb_present(vc, ^{ cb_install(user); notify_changed(); });
     else touch_editor_present(vc, user, YES, ^(BOOL saved) { if (saved) notify_changed(); });
   });
+}
+#ifndef GM_DYLIB
+static jvalue j_openTouchControls(void *env, void *thiz, jvalue *a) {
+  (void)env; (void)thiz; jvalue r = {0};
+  ios_touch_open(a ? jni_str(a[0].l) : NULL);
   return r;
 }
 static jni_impl_entry g_touch[] = {{0, "openTouchControls", 0, j_openTouchControls}};
 void touchedit_jni_init(void) { jni_add_impls(g_touch, 1); }
+#endif
 
 // ---- Steam friends touch button (command gmod_ios_friends, caught from the engine's "Unknown command" line) ----
 #define FRIENDS_LINE @"touch_addbutton \"friends\" \"gmodvr_touch_icons/ios_friends\" \"gmod_ios_friends\" 0.180000 0.000000 0.240000 0.133333 255 255 255 155 1 1"

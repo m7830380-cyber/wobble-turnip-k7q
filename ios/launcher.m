@@ -371,7 +371,7 @@ static BOOL bv(NSString *k, BOOL d) { return [D objectForKey:k] ? [D boolForKey:
   extern NSString *gi_content_missing(NSString *); extern NSString *gi_steam_user(void);
   UIColor *ok = [UIColor colorWithRed:0.35 green:0.85 blue:0.45 alpha:1], *bad = [UIColor colorWithRed:1 green:0.4 blue:0.35 alpha:1], *meh = [UIColor colorWithRed:1 green:0.75 blue:0.3 alpha:1];
   BOOL j = ios_jit_ok() != 0, m = gi_mem_entitled(); NSString *miss = gi_content_missing(self.docs);
-  self.stJit.text = [NSString stringWithFormat:@"JIT: %@", j ? @"True" : @"False  (StikDebug / TrollStore JIT pls)"]; self.stJit.textColor = j ? ok : bad;
+  self.stJit.text = [NSString stringWithFormat:@"JIT: %@", j ? (ios_jit_ok() == 2 ? @"not needed (native build)" : @"True") : @"False  (StikDebug / TrollStore JIT pls)"]; self.stJit.textColor = j ? ok : bad;
   self.stMem.text = [NSString stringWithFormat:@"Memory Entitlement: %@  (limit ~%d MB)", m ? @"True" : @"False", gi_mem_limit_mb()]; self.stMem.textColor = m ? ok : meh;
   self.stContent.text = [NSString stringWithFormat:@"Game Content: %@", miss ? [NSString stringWithFormat:@"False  (missing %@)", miss] : @"True"]; self.stContent.textColor = miss ? bad : ok;
   NSString *u = gi_steam_user();

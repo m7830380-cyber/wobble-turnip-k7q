@@ -1,0 +1,52 @@
+name: dyl
+on:
+  push:
+    paths: ['ios/**', '.github/workflows/dyl.yml']
+  workflow_dispatch:
+jobs:
+  ipa:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch owner dylibs (A8) + SDL headers
+        run: |
+          R=https://github.com/m7830380-cyber/wobble-turnip-k7q/releases/download/a8
+          curl -sfL -o gios.ipa $R/GiOS-0.1.31_A8.ipa
+          curl -sfL -o extra.zip $R/a8extra.zip
+          unzip -q gios.ipa -d o; mkdir ex && (cd ex && unzip -q ../extra.zip)
+          ls o/Payload/GiOS.app/Frameworks | wc -l
+          curl -sL https://github.com/libsdl-org/SDL/releases/download/release-2.30.12/SDL2-2.30.12.tar.gz | tar xz
+          python3 -m pip install --break-system-packages -q pillow || true
+      - name: Build
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          FW=o/Payload/GiOS.app/Frameworks
+          CC="xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot $SDK -O2 -g -DGM_DYLIB -Wno-unused-function -Wno-deprecated-declarations -ISDL2-2.30.12/include"
+          $CC -fobjc-arc -c ios/dyl.m -o dyl.o
+          $CC -fobjc-arc -c ios/paths.m -o paths.o
+          $CC -fobjc-arc -c ios/launcher.m -o launcher.o
+          $CC -fobjc-arc -c ios/touchedit.m -o touchedit.o; $CC -fobjc-arc -c ios/lan.m -o lan.o; $CC -fobjc-arc -c ios/kbfix.m -o kbfix.o
+          for f in sw upnp; do $CC -c ios/steam/$f.c -o st_$f.o; done
+          $CC -c ios/dec/LzmaDec.c -o lzmadec.o; $CC -O2 -c ios/dec/zstddeclib.c -o zstddec.o
+          $CC -fobjc-arc -c ios/steam/net_ios.m -o st_net.o; $CC -fobjc-arc -c ios/steam/workshop_ui.m -o st_ui.o; $CC -fobjc-arc -c ios/steam/gameinst.m -o st_gi.o; $CC -fobjc-arc -c ios/steam/mp_ui.m -o st_mpui.o
+          $CC -o gmod *.o -L$FW -lSDL2 -framework Foundation -framework UIKit -framework Metal -framework QuartzCore -framework WebKit -framework CoreGraphics -framework UniformTypeIdentifiers -framework Security -lz -Wl,-rpath,@executable_path/Frameworks -Wl,-export_dynamic 2>&1 | tee link.txt
+          nm -gU gmod | grep -E 'GiOS_|SDL_main' || true
+      - name: Package
+        run: |
+          APP=Payload/GMod.app; mkdir -p $APP/Frameworks
+          cp gmod ios/bundle/Info.plist $APP/
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" -c "Set :CFBundleShortVersionString 2.0.${GITHUB_RUN_NUMBER}" -c "Add :GMBuildSHA string ${GITHUB_SHA::7}" \
+            -c "Set :CFBundleIdentifier com.wobble.gmn" -c "Set :CFBundleDisplayName GMod NoJIT" -c "Set :CFBundleName GMod NoJIT" $APP/Info.plist
+          ibtool --compile $APP/LaunchScreen.storyboardc ios/bundle/LaunchScreen.storyboard
+          cp o/Payload/GiOS.app/Frameworks/*.dylib $APP/Frameworks/
+          cp -R o/Payload/GiOS.app/runtime $APP/runtime
+          cp -R ios/bundle/rt_extra/. $APP/runtime/
+          mkdir -p $APP/touch && python3 tools/vtf2png.py ex/touch_preview $APP/touch && cp ex/touch_default.cfg $APP/touch/
+          cp ios/bundle/touch/*.png $APP/touch/; for f in $APP/touch/touch_default.cfg $APP/runtime/cfg/touch_default.cfg; do [ -f $f ] && printf '\n%s\n' 'touch_addbutton "friends" "gmodvr_touch_icons/ios_friends" "gmod_ios_friends" 0.180000 0.000000 0.240000 0.133333 255 255 255 155 1 1' >> $f; done; ls $APP/touch | wc -l
+          for f in $APP/Frameworks/*.dylib; do codesign --sign - --force $f; done
+          codesign --entitlements ios/entitlements.plist --sign - --force $APP
+          codesign -d --entitlements - $APP/gmod || true
+          otool -L $APP/gmod; otool -l $APP/gmod | grep -A3 LC_RPATH || true
+          zip -qry GMod.tipa Payload; ls -la GMod.tipa
+      - uses: actions/upload-artifact@v4
+        with: { name: GMod-dyl-ipa, path: GMod.tipa }
