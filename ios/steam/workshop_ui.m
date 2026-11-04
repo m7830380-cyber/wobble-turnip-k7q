@@ -54,7 +54,7 @@ static volatile int g_cancel;
   [super viewDidLoad];
   self.view.backgroundColor = [UIColor colorWithWhite:0.06 alpha:1];
   UILabel *h = [UILabel new]; h.text = @"Workshop"; h.font = [UIFont boldSystemFontOfSize:24]; h.textColor = UIColor.whiteColor;
-  UIStackView *top = [[UIStackView alloc] initWithArrangedSubviews:@[h, [self btn:@"Browse" sel:@selector(browse)], [self btn:@"Add by ID / link" sel:@selector(addId)], [self btn:@"Done" sel:@selector(close)]]];
+  UIStackView *top = [[UIStackView alloc] initWithArrangedSubviews:@[h, [self btn:@"Browse" sel:@selector(browse)], [self btn:@"Add by ID / link" sel:@selector(addId)], [self btn:@"Presets" sel:@selector(presets)], [self btn:@"Done" sel:@selector(close)]]];
   top.spacing = 10; top.distribution = UIStackViewDistributionFill; [h setContentHuggingPriority:1 forAxis:0];
   for (UIView *v in top.arrangedSubviews) if ([v isKindOfClass:UIButton.class]) [v.widthAnchor constraintGreaterThanOrEqualToConstant:90].active = YES;
   self.status = [UILabel new]; self.status.textColor = [UIColor colorWithWhite:0.7 alpha:1]; self.status.font = [UIFont systemFontOfSize:13]; self.status.numberOfLines = 2;
@@ -107,6 +107,70 @@ static volatile int g_cancel;
     up.backgroundColor = [UIColor colorWithRed:0.24 green:0.62 blue:1 alpha:1]; [acts addObject:up];
   }
   return [UISwipeActionsConfiguration configurationWithActions:acts];
+}
+
+// ---- presets: named sets of enabled addons ----
+- (NSString *)presetFile { return [g_root stringByAppendingPathComponent:@"garrysmod/ios_addon_presets.json"]; }
+- (NSMutableDictionary *)loadPresets {
+  NSData *d = [NSData dataWithContentsOfFile:[self presetFile]]; id j = d ? [NSJSONSerialization JSONObjectWithData:d options:NSJSONReadingMutableContainers error:nil] : nil;
+  return [j isKindOfClass:NSDictionary.class] ? j : [NSMutableDictionary new];
+}
+- (void)savePresets:(NSDictionary *)p {
+  NSData *d = [NSJSONSerialization dataWithJSONObject:p options:NSJSONWritingPrettyPrinted error:nil]; [d writeToFile:[self presetFile] atomically:YES];
+}
+- (void)presets {
+  if (self.busy) return;
+  NSMutableDictionary *ps = [self loadPresets];
+  UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Addon presets" message:ps.count ? @"Tap one to load it: its addons get turned on, everything else off." : @"No presets yet. Save your current addon setup as one." preferredStyle:1];
+  for (NSString *k in [ps.allKeys sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)])
+    [a addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@  (%lu)", k, (unsigned long)[ps[k] count]] style:0 handler:^(UIAlertAction *x) { [self presetMenu:k]; }]];
+  [a addAction:[UIAlertAction actionWithTitle:@"Save current setup as preset…" style:0 handler:^(UIAlertAction *x) { [self presetSave:nil]; }]];
+  [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]];
+  [self presentViewController:a animated:YES completion:nil];
+}
+- (void)presetSave:(NSString *)over {
+  NSMutableArray *on = [NSMutableArray new]; for (NSDictionary *it in self.items) if ([it[@"enabled"] boolValue]) [on addObject:it[@"name"]];
+  void (^store)(NSString *) = ^(NSString *name) {
+    name = [name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet]; if (!name.length) return;
+    NSMutableDictionary *ps = [self loadPresets]; ps[name] = on; [self savePresets:ps];
+    self.status.text = [NSString stringWithFormat:@"Saved preset \"%@\" (%lu addons on).", name, (unsigned long)on.count]; };
+  if (over) { store(over); return; }
+  UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Save preset" message:[NSString stringWithFormat:@"%lu addons are on right now. Name this setup:", (unsigned long)on.count] preferredStyle:1];
+  [a addTextFieldWithConfigurationHandler:^(UITextField *f) { f.placeholder = @"e.g. horror maps, building, no lag"; }];
+  [a addAction:[UIAlertAction actionWithTitle:@"Save" style:0 handler:^(UIAlertAction *x) { store(a.textFields.firstObject.text); }]];
+  [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]];
+  [self presentViewController:a animated:YES completion:nil];
+}
+- (void)presetMenu:(NSString *)k {
+  UIAlertController *a = [UIAlertController alertControllerWithTitle:k message:nil preferredStyle:1];
+  [a addAction:[UIAlertAction actionWithTitle:@"Load it" style:0 handler:^(UIAlertAction *x) { [self presetApply:k]; }]];
+  [a addAction:[UIAlertAction actionWithTitle:@"Overwrite with current setup" style:0 handler:^(UIAlertAction *x) { [self presetSave:k]; }]];
+  [a addAction:[UIAlertAction actionWithTitle:@"Delete preset" style:2 handler:^(UIAlertAction *x) {
+    NSMutableDictionary *ps = [self loadPresets]; [ps removeObjectForKey:k]; [self savePresets:ps]; self.status.text = [NSString stringWithFormat:@"Preset \"%@\" yeeted.", k]; }]];
+  [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:1 handler:nil]];
+  [self presentViewController:a animated:YES completion:nil];
+}
+- (void)presetApply:(NSString *)k {
+  NSArray *want = [self loadPresets][k]; if (![want isKindOfClass:NSArray.class]) return;
+  NSSet *ws = [NSSet setWithArray:want]; NSMutableSet *have = [NSMutableSet new]; NSFileManager *fm = NSFileManager.defaultManager;
+  [fm createDirectoryAtPath:[self disabled] withIntermediateDirectories:YES attributes:nil error:nil];
+  [fm createDirectoryAtPath:[self addons] withIntermediateDirectories:YES attributes:nil error:nil];
+  int moved = 0;
+  for (NSDictionary *it in self.items) {
+    BOOL on = [ws containsObject:it[@"name"]]; if (on) [have addObject:it[@"name"]];
+    if (on == [it[@"enabled"] boolValue]) continue;
+    NSString *dst = [(on ? [self addons] : [self disabled]) stringByAppendingPathComponent:it[@"name"]];
+    if ([fm moveItemAtPath:it[@"path"] toPath:dst error:nil]) moved++;
+  }
+  [self reload];
+  NSMutableArray *miss = [NSMutableArray new]; for (NSString *n in want) if (![have containsObject:n] && n.longLongValue > 0) [miss addObject:n];
+  self.status.text = [NSString stringWithFormat:@"Loaded \"%@\" (%d switched).", k, moved];
+  if (miss.count) {
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Some addons are missing" message:[NSString stringWithFormat:@"%lu addon(s) from this preset aren't installed anymore. Download them?", (unsigned long)miss.count] preferredStyle:1];
+    [a addAction:[UIAlertAction actionWithTitle:@"Yeah, grab them" style:0 handler:^(UIAlertAction *x) { [self download:[miss componentsJoinedByString:@","]]; }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Nah" style:1 handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+  }
 }
 
 // ---- download ----

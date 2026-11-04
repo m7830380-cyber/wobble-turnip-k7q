@@ -297,6 +297,23 @@ static void dxt1_patch(void) {
     memcpy(a, ta, 16); memcpy(b, tb, 16); r2 = mprotect((void *)pg, 32768, PROT_READ | PROT_EXEC); }
   sys_icache_invalidate(a, 32); fprintf(stderr, "[dxt1] DXT1 with 1-bit alpha -> RGBA8 instead of ETC2 RGB (%d %d)\n", r1, r2);
 }
+/* libtogl 0.1.31: a shader the D3D->GLSL translator can't handle calls tier0 Error() = game exits (Viewfinder's VHS
+   signal shaders on "Linux"). Turn the 3 translator Error() calls into Warning(): the shader then just fails to
+   compile/link and addons that probe their output (Viewfinder) fall back on their own. */
+static void togl_soft_patch(void) {
+  so_module *tg = so_find("libtogl.so"); if (!tg) return;
+  static const uint32_t at[3] = {0x52760, 0x554f0, 0x56d28}, was[3] = {0x94026124, 0x940255c0, 0x94024fb2};
+  extern void *so_wptr(void *); extern int so_is_mirrored(void *); int n = 0;
+  for (int i = 0; i < 3; i++) {
+    uint32_t *ins = (uint32_t *)(tg->base + at[i]);
+    if (*ins != was[i]) { fprintf(stderr, "[togl] translate-error site %x unexpected %08x\n", at[i], *ins); continue; }
+    uint32_t nw = was[i] + 0x40;  /* bl Error@plt (0xeabf0) -> bl Warning@plt (0xeacf0) */
+    if (so_is_mirrored(ins)) *(uint32_t *)so_wptr(ins) = nw;
+    else { uintptr_t pg = (uintptr_t)ins & ~(uintptr_t)16383; mprotect((void *)pg, 16384, PROT_READ | PROT_WRITE); *ins = nw; mprotect((void *)pg, 16384, PROT_READ | PROT_EXEC); }
+    sys_icache_invalidate(ins, 4); n++;
+  }
+  fprintf(stderr, "[togl] shader translation errors are non-fatal now (%d/3)\n", n);
+}
 static int not_debugging(void) { return 0; }
 /* LuaJIT machine code crashes on iOS (debugger freezes the faulting thread) -> interpreter only */
 static void *lua_real(const char *n) { so_module *m = so_find("liblua_shared.so"); return m ? so_sym(m, n) : NULL; }
@@ -588,7 +605,7 @@ int main(int argc, char **argv) {
     }
   }
   so_init_all();
-  dxt1_patch();
+  dxt1_patch(); togl_soft_patch();
   { /* libshaderapidx9 0.1.31: the dynamic index buffer is 32768 indices; big addon meshes ask for more
        ("too many indices for index buffer (32802>32768)") -> tier0 Error() -> the game exits. Make it 65536. */
     so_module *sa = so_find("libshaderapidx9.so");
